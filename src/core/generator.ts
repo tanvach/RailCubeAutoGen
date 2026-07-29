@@ -107,8 +107,11 @@ export class Generator {
         const upOff = eq(state.up, START_STATE.up) ? 0 : 2;
         if (dist > remaining * MAX_STEP_DIST || remaining < Math.max(dirOff, upOff)) return false;
 
-        // Weighted-random candidate order.
+        // Weighted-random candidate order. When the piece budget gets tight
+        // relative to the distance home, switch to homing: prefer pieces whose
+        // exit moves toward the start cube (random order rarely wanders back).
         const elev = this.options.elevation;
+        const homing = remaining * MAX_STEP_DIST - dist < 15;
         const scored = CANDIDATES
             .filter((t) => {
                 const k = inventoryKeyOf(t) as InventoryKey;
@@ -118,12 +121,16 @@ export class Generator {
                 let w = 1.0;
                 if (t === 'curveLeft' || t === 'curveRight') w = 1.1 - elev * 0.4;
                 else if (t === 'inner' || t === 'outer') w = 0.08 + elev * 2.2;
-                return { t, r: this.rand() / w };
+                const placement = computePlacement(t, state);
+                const r = homing
+                    ? manhattan(placement.exit.cell, START_STATE.cell) + this.rand() * 0.5
+                    : this.rand() / w;
+                return { placement, r };
             })
             .sort((a, b) => a.r - b.r);
 
-        for (const { t } of scored) {
-            const placement = computePlacement(t, state);
+        for (const { placement } of scored) {
+            const t = placement.type;
             if (!this.grid.canPlace(placement)) continue;
 
             const k = inventoryKeyOf(t) as InventoryKey;
@@ -145,6 +152,20 @@ export class Generator {
     }
 }
 
+/**
+ * Restart schedule: backtracking runtimes are heavy-tailed, so most seeds
+ * close a loop quickly while an unlucky one can burn its whole budget.
+ * Many cheap attempts first, escalating the budget only for stubborn
+ * settings, is much faster in the median AND more likely to succeed than a
+ * few expensive attempts.
+ */
+const RESTART_SCHEDULE = [
+    { attempts: 40, maxNodes: 15_000 },
+    { attempts: 20, maxNodes: 60_000 },
+    { attempts: 8, maxNodes: 250_000 },
+    { attempts: 6, maxNodes: 1_000_000 },
+];
+
 /** Try multiple seeds until a track is found. */
 export const generateTrack = (
     inventory: Inventory,
@@ -153,11 +174,31 @@ export const generateTrack = (
     onProgress?: (attempt: number) => void,
 ): GeneratedTrack | null => {
     const baseSeed = options.seed ?? Math.floor(Math.random() * 2 ** 31);
-    for (let i = 0; i < attempts; i++) {
-        onProgress?.(i);
-        const gen = new Generator(inventory, { ...options, seed: baseSeed + i * 7919 });
-        const result = gen.generate();
-        if (result) return result;
+
+    // Explicit maxNodes = fixed-budget mode (tests, benchmarks).
+    if (options.maxNodes !== undefined) {
+        for (let i = 0; i < attempts; i++) {
+            onProgress?.(i);
+            const gen = new Generator(inventory, { ...options, seed: baseSeed + i * 7919 });
+            const result = gen.generate();
+            if (result) return result;
+        }
+        return null;
+    }
+
+    let attempt = 0;
+    for (const round of RESTART_SCHEDULE) {
+        for (let i = 0; i < round.attempts; i++) {
+            onProgress?.(attempt);
+            const gen = new Generator(inventory, {
+                ...options,
+                seed: baseSeed + attempt * 7919,
+                maxNodes: round.maxNodes,
+            });
+            const result = gen.generate();
+            if (result) return result;
+            attempt++;
+        }
     }
     return null;
 };

@@ -36,6 +36,7 @@ No install needed — share that link with anyone who has a browser.
 | `npm run build` | Type-check + production build into `dist/` |
 | `npm run preview` | Serve the production build on port 4173 |
 | `node scripts/screenshot.mjs [outDir]` | Headless visual check: screenshots the default course, both manual examples, and generated tracks (requires `npm run preview` running) |
+| `npx vite-node scripts/bench-generator.ts` | Generator wall-time benchmark across realistic settings |
 
 ## The piece model
 
@@ -67,8 +68,11 @@ Placement rules enforced by the model:
 ## Features
 
 - **Generator** — seeded backtracking search (runs in a Web Worker) with weighted-random
-  piece selection, an elevation dial (flat ↔ vertical), and Manhattan-distance pruning.
-  Deterministic per seed; retries with new seeds until a loop closes.
+  piece selection, an elevation dial (flat ↔ vertical), Manhattan-distance pruning, and a
+  head-home bias when the piece budget runs low. Deterministic per seed. Restarts follow an
+  escalating budget schedule (many cheap seeds first — backtracking runtimes are heavy-
+  tailed), and if extreme settings can't close, the worker relaxes them slightly once
+  instead of failing.
 - **3D viewport** — faithful piece meshes (near-flush steel rail strips, two-tone curves
   with grooves on both faces, concave/convex wedge profiles, connector knobs), minimal
   support pillars (only under long floating runs), OrbitControls, and an animated train that

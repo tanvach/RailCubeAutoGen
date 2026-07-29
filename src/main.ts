@@ -109,7 +109,7 @@ const showToast = (msg: string) => {
 const worker = new Worker(new URL('./core/generator.worker.ts', import.meta.url), { type: 'module' });
 
 worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
-    const { type, data, message } = e.data;
+    const { type, data, message, relaxed } = e.data;
 
     if (type === 'progress') {
         loadingText.textContent = message || 'Generating…';
@@ -121,6 +121,7 @@ worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
 
     if (type === 'success' && data) {
         applyTrack(data);
+        if (relaxed) showToast('Those settings were very tough — relaxed them slightly to close the loop.');
     } else {
         showToast(message || 'Failed to generate a track.');
     }

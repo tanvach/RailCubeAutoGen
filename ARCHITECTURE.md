@@ -36,17 +36,24 @@ export interface TrackState {
   their full footprint. `Inventory` pools `curveLeft`/`curveRight` into one physical part.
 - **`grid.ts`** (`OccupancyGrid`) — solid cells (unique) and swing cells (refcounted).
   A solid may not overlap any solid or swing; swings may overlap each other (two rails can
-  face each other across a slot). Floor at `y ≥ 0`.
+  face each other across a slot). Floor at `y ≥ 0`. Cells are keyed by packed integers
+  (not strings) — this is the generator's hottest path.
 - **`generator.ts`** — seeded backtracking (mulberry32) over TrackState space. Weighted
   random candidate order (`elevation` shifts weight to/from inner/outer), Manhattan
-  pruning against the remaining piece budget, cross route-2 handled as a special "pass
-  through occupied cell" step with a once-per-cross rule. `generateTrack()` retries over
-  derived seeds until a loop closes.
+  pruning against the remaining piece budget, a head-home candidate ordering when the
+  budget gets tight, cross route-2 handled as a special "pass through occupied cell" step
+  with a once-per-cross rule. `generateTrack()` retries derived seeds on an **escalating
+  budget schedule** (40×15k → 20×60k → 8×250k → 6×1M nodes): backtracking runtimes are
+  heavy-tailed, so many cheap seeds beat a few expensive ones. Passing an explicit
+  `maxNodes` (tests) keeps the old fixed-budget behavior.
+- **`generator.worker.ts`** — message wrapper so search never blocks the UI. If extreme
+  settings fail the full schedule, it retries once with softened constraints
+  (`minPieces × 0.6`, `elevation × 0.8`) and flags the response `relaxed` so the UI can
+  say so, rather than surfacing a failure.
 - **`replay.ts`** — interprets a fixed program (the manual's printed sequences) into placed
   geometry; used by tests, the app's default view, and the console dev hook.
 - **`examples.ts`** — ground-truth programs transcribed from the printed manual
   (slotted frame, S-course).
-- **`generator.worker.ts`** — message wrapper so search never blocks the UI.
 
 ### `src/view` — Three.js
 

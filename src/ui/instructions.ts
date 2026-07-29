@@ -67,7 +67,7 @@ export class Instructions {
         const sizing = piece.type === 'start' ? 'w-11 text-[9px]' : 'w-8 text-[10px]';
         return `
       <span class="inline-flex items-center">
-        <span class="${sizing} h-8 rounded-md border-2 border-black/10 shadow-sm flex items-center justify-center
+        <span class="program-chip ${sizing} h-8 rounded-md border-2 border-black/10 shadow-sm flex items-center justify-center
           font-bold text-white/90" style="${s.bg};${s.text ?? ''}">${label}</span>
         <svg class="w-3 h-3 text-gray-400 mx-0.5 chip-arrow" viewBox="0 0 12 12" fill="currentColor">
           <path d="M4 2l4 4-4 4z"/>

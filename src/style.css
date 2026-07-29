@@ -10,6 +10,12 @@
 
 /* Print layout: 3D snapshot + assembly program, for taking to the playroom. */
 @media print {
+    /* Browsers strip backgrounds by default — keep piece colors in the sequence. */
+    html, body, #app, #instructions-container, #print-view {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
     .no-print {
         display: none !important;
     }
@@ -22,6 +28,12 @@
         height: auto !important;
         overflow: visible !important;
         background: white !important;
+    }
+
+    .program-chip {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        box-shadow: none !important;
     }
 
     #app > div,

@@ -34,7 +34,7 @@ export class Instructions {
 
         this.container.innerHTML = `
       <div class="p-4 print-block">
-        <div class="flex items-baseline justify-between mb-2">
+        <div class="mb-2 flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
           <h3 class="font-bold text-gray-800">Assembly Program</h3>
           <span class="text-xs text-gray-500">${pieces.length} pieces — connect in order, knob → socket</span>
         </div>

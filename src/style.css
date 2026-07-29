@@ -8,10 +8,84 @@
     display: none;
 }
 
+/* App shell. Phones: 3D view on top, then a tab bar and a sheet holding one of
+   the two panes. Wide screens: controls sidebar on the left, view above steps.
+   Grid areas (rather than DOM order) let one markup tree serve both. */
+#layout {
+    display: grid;
+    overflow: hidden;
+    height: 100vh;
+    height: 100dvh; /* phones: excludes browser chrome */
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto 46vh;
+    grid-template-rows: minmax(0, 1fr) auto 46dvh;
+    grid-template-areas:
+        'view'
+        'tabs'
+        'sheet';
+}
+
+#view-pane {
+    grid-area: view;
+}
+
+#pane-tabs {
+    grid-area: tabs;
+}
+
+#controls-pane,
+#instructions-container {
+    grid-area: sheet;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Only the selected pane occupies the sheet (overridden below on wide screens,
+   where both panes have their own area). */
+body[data-pane='controls'] #instructions-container,
+body[data-pane='steps'] #controls-pane {
+    display: none;
+}
+
+.pane-tab {
+    color: #6b7280;
+}
+
+body[data-pane='controls'] .pane-tab[data-pane='controls'],
+body[data-pane='steps'] .pane-tab[data-pane='steps'] {
+    background: #fff;
+    color: #2563eb;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+}
+
+@media (min-width: 768px) {
+    #layout {
+        grid-template-columns: 18rem minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) auto;
+        grid-template-areas:
+            'controls view'
+            'controls steps';
+    }
+
+    #controls-pane {
+        grid-area: controls;
+    }
+
+    #instructions-container {
+        grid-area: steps;
+        max-height: 38vh;
+    }
+
+    body[data-pane='controls'] #instructions-container,
+    body[data-pane='steps'] #controls-pane {
+        display: block;
+    }
+}
+
 /* Print layout: 3D snapshot + assembly program, for taking to the playroom. */
 @media print {
     /* Browsers strip backgrounds by default — keep piece colors in the sequence. */
-    html, body, #app, #instructions-container, #print-view {
+    html, body, #app, #layout, #instructions-container, #print-view {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
     }
@@ -36,8 +110,8 @@
         box-shadow: none !important;
     }
 
-    #app > div,
-    #app .print-column {
+    #layout,
+    #view-pane {
         display: block !important;
         height: auto !important;
         overflow: visible !important;
@@ -59,7 +133,9 @@
         border-radius: 4px;
     }
 
+    /* Print the program even when the phone sheet is showing Controls. */
     #instructions-container {
+        display: block !important;
         max-height: none !important;
         overflow: visible !important;
         border: none !important;

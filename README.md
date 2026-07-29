@@ -35,7 +35,7 @@ No install needed — share that link with anyone who has a browser.
 | `npm test` | Vitest suite (model, generator, UI) |
 | `npm run build` | Type-check + production build into `dist/` |
 | `npm run preview` | Serve the production build on port 4173 |
-| `node scripts/screenshot.mjs [outDir]` | Headless visual check: screenshots the default course, both manual examples, and generated tracks (requires `npm run preview` running) |
+| `node scripts/screenshot.mjs [outDir]` | Headless visual check: screenshots the default course, the manual example, generated tracks, the mobile portrait shell, and the print view (requires `npm run preview` running) |
 | `npx vite-node scripts/bench-generator.ts` | Generator wall-time benchmark across realistic settings |
 
 ## The piece model
@@ -76,7 +76,9 @@ Placement rules enforced by the model:
 - **3D viewport** — faithful piece meshes (near-flush steel rail strips, two-tone curves
   with grooves on both faces, concave/convex wedge profiles, connector knobs), minimal
   support pillars (only under long floating runs), OrbitControls, and an animated train that
-  follows the exact rail path — including riding walls and hanging upside down.
+  follows the exact rail path — including riding walls and hanging upside down. A fill light
+  tracks the camera, so spinning round to the back of a track keeps the piece colors
+  readable instead of leaving them in the sun's shade.
 - **Assembly program** — color-sequence chips in build order matching the manual's notation
   (START, L/R on curves, numbered cross routes), piece-count summary, live "used / total"
   inventory, and a print layout that includes both a 3D snapshot and the assembly program.
@@ -85,7 +87,16 @@ Placement rules enforced by the model:
 - **Sticky session** — kit, sliders, mode, and the last displayed track all persist across
   browser refreshes.
 - **Simple / Advanced controls** — Advanced exposes track size and elevation separately;
-  Simple is one five-notch complexity dial (Cozy loop → Wild) that sets both.
+  Simple is one five-notch complexity dial (Cozy loop → Wild) that sets both. A "Show train"
+  toggle hides the train when it's distracting.
+- **Works on a phone** — on narrow screens the 3D view sits on top and a tabbed sheet
+  switches between Controls and Steps, so neither is cramped. The camera framing accounts
+  for the viewport shape and re-frames on rotation, so a track is never cropped.
+
+<p align="center">
+  <img src="docs/images/mobile-controls.png" width="270" alt="Mobile controls pane" />
+  <img src="docs/images/mobile-steps.png" width="270" alt="Mobile steps pane" />
+</p>
 
 ![Manual frame example rendered](docs/images/manual-frame.png)
 

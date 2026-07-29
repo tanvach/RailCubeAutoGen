@@ -65,6 +65,16 @@ await page.waitForTimeout(500);
 await waitGenerated();
 await page.screenshot({ path: `${out}/generated-deluxe.png` });
 
+// Mobile portrait shell: 3D view on top, tabbed sheet below.
+await page.setViewportSize({ width: 390, height: 844 });
+await page.waitForTimeout(1200);
+await page.screenshot({ path: `${out}/mobile-controls.png` });
+await page.click('.pane-tab[data-pane="steps"]');
+await page.waitForTimeout(400);
+await page.screenshot({ path: `${out}/mobile-steps.png` });
+
+await page.setViewportSize({ width: 1500, height: 950 });
+await page.waitForTimeout(600);
 await page.emulateMedia({ media: 'print' });
 await page.screenshot({ path: `${out}/print-view.png` });
 

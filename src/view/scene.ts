@@ -5,6 +5,8 @@ import { PiecePlacement, Step } from '../core/pieces';
 import { key } from '../core/vec';
 import { buildPieceMesh, buildTrain, buildPillar, railSamplesForStep, PathSample } from './meshes';
 
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
 export interface TrackScene {
     pieces: PiecePlacement[];
     steps: Step[];
@@ -26,6 +28,13 @@ export class SceneController {
     private lastTime = performance.now();
     public trainSpeed = 1.6; // cells per second
     private showTrain = true;
+    private bounds: THREE.Box3 | null = null;
+    private userAdjusted = false;
+
+    private fill = new THREE.DirectionalLight(0xffffff, 2);
+
+    /** Camera offset direction: the -X/+Z quadrant, so START reads pointing right. */
+    private static readonly VIEW_DIR = new THREE.Vector3(-0.8, 0.75, 1.15);
 
     constructor(container: HTMLElement) {
         this.scene.background = new THREE.Color(0xe8eef4);
@@ -37,7 +46,9 @@ export class SceneController {
         this.camera.position.set(9, 8, 11);
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        // Phones are usually 3x DPR; rendering that many pixels costs frames
+        // for little visible gain on a small panel.
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, window.innerWidth < 768 ? 1.5 : 2));
         this.renderer.setSize(container.clientWidth, container.clientHeight);
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -52,6 +63,8 @@ export class SceneController {
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
         this.controls.maxPolarAngle = Math.PI * 0.55;
+        // Fires on user input only, so auto-framing can defer to a hand-set view.
+        this.controls.addEventListener('start', () => { this.userAdjusted = true; });
 
         // Lights
         this.scene.add(new THREE.HemisphereLight(0xffffff, 0xc8bfae, 0.9));
@@ -65,6 +78,11 @@ export class SceneController {
         sun.shadow.camera.bottom = -25;
         sun.shadow.bias = -0.0004;
         this.scene.add(sun);
+
+        // Orbiting to the far side of a track leaves every face the camera can
+        // see on the sun's dark side. This fill tracks the camera (see aimFill)
+        // so whatever you turn toward stays readable.
+        this.scene.add(this.fill, this.fill.target);
 
         // Ground (cells rest with their bottoms at y = -0.5)
         const ground = new THREE.Mesh(
@@ -95,6 +113,8 @@ export class SceneController {
         this.totalLen = 0;
         this.trainDist = 0;
         this.train.visible = false;
+        this.bounds = null;
+        this.userAdjusted = false;
         if (!track || track.pieces.length === 0) return;
 
         for (const piece of track.pieces) {
@@ -215,17 +235,85 @@ export class SceneController {
     private fitCamera() {
         const bbox = new THREE.Box3().setFromObject(this.trackGroup);
         if (bbox.isEmpty()) return;
+        this.bounds = bbox;
         const center = bbox.getCenter(new THREE.Vector3());
         const size = bbox.getSize(new THREE.Vector3());
-        const radius = Math.max(size.x, size.y, size.z) * 0.72 + 3;
+        const roomy = SceneController.VIEW_DIR.length() * (Math.max(size.x, size.y, size.z) * 0.72 + 3);
+        // A mostly flat track foreshortens into a thin band from a low angle,
+        // which wastes a squarish (portrait phone) frame — tilt further up as
+        // the canvas gets narrower. Wide canvases keep the original angle.
+        const narrow = THREE.MathUtils.clamp((1.7 - this.camera.aspect) / 0.6, 0, 1);
+        const dir = SceneController.VIEW_DIR.clone();
+        dir.y += narrow * 0.85;
+        dir.normalize();
         this.controls.target.copy(center);
-        // View from the -X/+Z quadrant so the start cube (heading +X) reads as
-        // pointing to the right on screen.
-        this.camera.position.set(
-            center.x - radius * 0.8,
-            center.y + radius * 0.75,
-            center.z + radius * 1.15,
-        );
+        // Keep the roomy framing where it fits; a narrow canvas (portrait
+        // phone) sees less width at the same distance, so pull back instead.
+        this.camera.position.copy(center)
+            .addScaledVector(dir, Math.max(roomy, this.fitDistance(center, dir)));
+        this.controls.update();
+    }
+
+    /**
+     * Nearest distance from `center` along `dir` that keeps every corner of the
+     * track bounds inside the frustum. On portrait phones the horizontal field
+     * of view is the tight constraint, so this is what prevents cropping.
+     */
+    private fitDistance(center: THREE.Vector3, dir: THREE.Vector3): number {
+        if (!this.bounds) return 0;
+        const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
+        const tanH = tanV * this.camera.aspect;
+        const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0));
+        if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
+        right.normalize();
+        const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+
+        // A corner at depth (d - along) must satisfy |lateral| <= tan * depth.
+        const p = new THREE.Vector3();
+        let need = 0;
+        for (let i = 0; i < 8; i++) {
+            p.set(
+                i & 1 ? this.bounds.max.x : this.bounds.min.x,
+                i & 2 ? this.bounds.max.y : this.bounds.min.y,
+                i & 4 ? this.bounds.max.z : this.bounds.min.z,
+            ).sub(center);
+            const lateral = Math.max(Math.abs(p.dot(right)) / tanH, Math.abs(p.dot(up)) / tanV);
+            need = Math.max(need, p.dot(dir) + lateral);
+        }
+        return need * 1.06;
+    }
+
+    /**
+     * Hold the fill over the viewer's left shoulder, off-axis enough to still
+     * shade the pieces rather than flatten them like a headlight. It stays at a
+     * fixed intensity: the sunlit side already renders at full brightness, so
+     * the extra light only shows up where the sun doesn't reach.
+     */
+    private aimFill() {
+        const offset = this.camera.position.clone().sub(this.controls.target);
+        const dist = offset.length();
+        if (dist < 1e-6) return;
+        const dir = offset.divideScalar(dist);
+        const right = new THREE.Vector3().crossVectors(dir, WORLD_UP);
+        if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
+        right.normalize();
+        const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+        this.fill.position.copy(this.camera.position)
+            .addScaledVector(right, -0.55 * dist)
+            .addScaledVector(up, 0.5 * dist);
+        this.fill.target.position.copy(this.controls.target);
+    }
+
+    /** After a resize or device rotation, pull back if the track would crop. */
+    private keepInView() {
+        if (!this.bounds) return;
+        const offset = this.camera.position.clone().sub(this.controls.target);
+        const dist = offset.length();
+        if (dist < 1e-6) return;
+        const dir = offset.divideScalar(dist);
+        const need = this.fitDistance(this.controls.target, dir);
+        if (dist >= need) return;
+        this.camera.position.copy(this.controls.target).addScaledVector(dir, need);
         this.controls.update();
     }
 
@@ -248,9 +336,14 @@ export class SceneController {
     }
 
     private onResize(container: HTMLElement) {
+        if (container.clientWidth < 2 || container.clientHeight < 2) return;
         this.camera.aspect = container.clientWidth / container.clientHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(container.clientWidth, container.clientHeight);
+        // Re-frame on rotation / window changes, but never override a view the
+        // user set by hand — then just make sure nothing gets cropped.
+        if (this.userAdjusted) this.keepInView();
+        else this.fitCamera();
     }
 
     private animate = () => {
@@ -263,6 +356,7 @@ export class SceneController {
             this.placeTrain(this.trainDist);
         }
         this.controls.update();
+        this.aimFill();
         this.renderer.render(this.scene, this.camera);
     };
 }

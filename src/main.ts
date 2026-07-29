@@ -9,14 +9,16 @@ import { WorkerRequest, WorkerResponse } from './core/generator.worker';
 import { replayProgram } from './core/replay';
 import { MANUAL_EXAMPLE_2 } from './core/examples';
 
+// Layout areas are placed by CSS grid (see style.css), so the same markup
+// serves phones (view on top, tabbed sheet below) and wide screens (sidebar).
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <div class="flex h-screen flex-col md:flex-row overflow-hidden bg-gray-50">
-    <div class="w-full md:w-72 shrink-0 bg-white border-r border-gray-200 overflow-y-auto z-10 no-print">
-      <div id="sidebar-container" class="p-5"></div>
-      <div id="favorites-panel" class="px-5 pb-5"></div>
+  <div id="layout" class="bg-gray-50">
+    <div id="controls-pane" class="bg-white border-gray-200 md:border-r z-10 no-print">
+      <div id="sidebar-container" class="p-4 md:p-5"></div>
+      <div id="favorites-panel" class="px-4 pb-4 md:px-5 md:pb-5"></div>
     </div>
 
-    <div class="print-column flex-1 relative flex flex-col min-w-0">
+    <div id="view-pane" class="relative flex flex-col min-w-0">
       <!-- Snapshot kept in sync with the viewport so print preview always has it. -->
       <div id="print-view" class="print-only">
         <img id="print-snapshot" alt="Track preview" />
@@ -30,11 +32,35 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </div>
         <div id="toast" class="absolute left-1/2 -translate-x-1/2 top-4 bg-gray-800 text-white
           text-sm px-4 py-2 rounded-lg shadow hidden z-30"></div>
+        <!-- Phones keep the title here so the sheet is all controls. -->
+        <p class="pointer-events-none absolute left-4 top-3 text-sm font-extrabold text-gray-700 md:hidden">
+          Rail Cube <span class="text-blue-500">Auto-Gen</span>
+        </p>
       </div>
-      <div id="instructions-container" class="shrink-0 max-h-[38%] overflow-y-auto bg-white border-t border-gray-200 print-block"></div>
     </div>
+
+    <nav id="pane-tabs" class="border-t border-gray-200 bg-white p-2 md:hidden no-print">
+      <div class="grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1 text-sm font-semibold">
+        <button type="button" class="pane-tab rounded-md py-1.5" data-pane="controls">Controls</button>
+        <button type="button" class="pane-tab rounded-md py-1.5" data-pane="steps">Steps</button>
+      </div>
+    </nav>
+
+    <div id="instructions-container" class="bg-white border-gray-200 md:border-t"></div>
   </div>
 `;
+
+// Phones show one sheet pane at a time; CSS keys off the body attribute.
+const showPane = (pane: 'controls' | 'steps') => {
+    document.body.dataset.pane = pane;
+    document.querySelectorAll<HTMLButtonElement>('.pane-tab').forEach((btn) => {
+        btn.setAttribute('aria-pressed', String(btn.dataset.pane === pane));
+    });
+};
+document.querySelectorAll<HTMLButtonElement>('.pane-tab').forEach((btn) => {
+    btn.addEventListener('click', () => showPane(btn.dataset.pane as 'controls' | 'steps'));
+});
+showPane('controls');
 
 // Degrade gracefully if WebGL is unavailable: the 3D view goes away but
 // generation and printable instructions still work.

@@ -180,7 +180,7 @@ export class Sidebar {
 
         this.container.innerHTML = `
       <div class="space-y-5">
-        <div>
+        <div class="hidden md:block">
           <h1 class="text-lg font-extrabold text-gray-800">Rail Cube <span class="text-blue-500">Auto-Gen</span></h1>
           <p class="text-xs text-gray-500 mt-1">Procedural closed loops for the Rail Cube magnetic train set.</p>
         </div>

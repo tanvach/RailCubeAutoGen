@@ -76,13 +76,24 @@ export interface TrackState {
   pointing at the exit face.
   Also: rail-path samplers per piece (used by the train), the train itself, support pillars.
 - **`scene.ts`** (`SceneController`) — lights/shadows plus a `RoomEnvironment` map (for the
-  steel), ground plane at the cell bottom (y = −0.5), auto camera framing from the −X/+Z
+  steel), a camera-tracking fill light (a fixed sun leaves whatever face you orbit toward on
+  its dark side; the fill sits over the viewer's shoulder — off-axis, so pieces still shade
+  rather than flatten. It needs no dimming logic because the sunlit side already renders at
+  full brightness, so the extra light only registers where the sun doesn't reach. Note that
+  a light parented to the camera is *not* picked up by the renderer's light list, so it
+  lives in the scene and is re-aimed each frame), ground plane at the cell bottom
+  (y = −0.5), auto camera framing from the −X/+Z
   quadrant (so the start cube reads as pointing right), train animation along an
   **arc-length parameterized rail path** built from the traversal steps (constant speed
   through curves and vertical segments), minimal support pillars (a piece anchors a run if
   it touches the ground or another cell; every third consecutive floating piece gets one
   pillar, keeping train swing cells and down-facing rails clear), and `captureThumbnail()`
-  for favorite snapshots.
+  for favorite snapshots. Auto-framing is viewport-aware: the camera distance is solved from
+  the projected track bounds (the horizontal field of view is the tight constraint on a
+  portrait phone) and the view angle steepens as the canvas narrows, since a flat track
+  foreshortens into a thin band from a low angle. A `ResizeObserver` re-frames on rotation,
+  except once the user has orbited by hand — then it only pulls back far enough to avoid
+  cropping.
 
 ### `src/ui` — DOM
 
@@ -98,6 +109,12 @@ export interface TrackState {
   plain JSON (no class instances), so a saved track round-trips exactly and re-renders
   without re-running the generator. Thumbnails come from `captureThumbnail()`; capped at
   12 entries with quota fallback.
+- **App shell** — `#layout` is a CSS grid whose named areas are re-assigned at the 768px
+  breakpoint, so one markup tree serves both forms: phones get the 3D view on top, a tab bar,
+  and a sheet holding *one* of the two panes (`body[data-pane]` picks which); wider screens
+  get the controls column on the left with the view above the steps panel. Placing by area
+  rather than DOM order keeps the print flow (snapshot then program) intact, and the print
+  rules force the program visible even when the phone sheet is showing Controls.
 - **`main.ts`** — wiring, plus failure paths: worker `onerror` resets the loading state
   with a toast, and if WebGL can't start the app degrades to instructions-only with a
   message in place of the viewport. The last displayed track is restored from localStorage

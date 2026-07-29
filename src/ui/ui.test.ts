@@ -113,6 +113,27 @@ describe('Sidebar', () => {
         expect(link).toBeTruthy();
         expect(link?.textContent).toContain('View source');
     });
+
+    it('persists the show-train toggle and notifies on change', () => {
+        const onTrain = vi.fn();
+        const sidebar = new Sidebar('sidebar-root', {
+            onGenerate: () => {},
+            onShowTrainChange: onTrain,
+        });
+        expect(sidebar.isShowTrain()).toBe(true);
+        const toggle = document.querySelector('#train-toggle') as HTMLInputElement;
+        expect(toggle.checked).toBe(true);
+
+        toggle.checked = false;
+        toggle.dispatchEvent(new Event('change'));
+        expect(sidebar.isShowTrain()).toBe(false);
+        expect(onTrain).toHaveBeenCalledWith(false);
+
+        document.body.innerHTML = '<div id="sidebar-root"></div>';
+        const again = new Sidebar('sidebar-root', () => {});
+        expect(again.isShowTrain()).toBe(false);
+        expect((document.querySelector('#train-toggle') as HTMLInputElement).checked).toBe(false);
+    });
 });
 
 describe('Instructions', () => {

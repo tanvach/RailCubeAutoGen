@@ -10,6 +10,12 @@ export interface SidebarState {
 type OnGenerateCallback = (state: SidebarState) => void;
 type Mode = 'simple' | 'advanced';
 
+export interface SidebarCallbacks {
+    onGenerate: OnGenerateCallback;
+    onSave?: () => void;
+    onShowTrainChange?: (on: boolean) => void;
+}
+
 const KITS: Record<string, Inventory> = {
     starter: STARTER_SET,
     deluxe: DELUXE_SET,
@@ -32,22 +38,42 @@ export class Sidebar {
     private container: HTMLElement;
     private onGenerate: OnGenerateCallback;
     private onSave: (() => void) | null;
+    private onShowTrainChange: ((on: boolean) => void) | null;
     private kit: 'starter' | 'deluxe' | 'custom' = 'starter';
     private inventory: Inventory = { ...STARTER_SET };
     private size = 20;
     private elevation = 0.3;
     private mode: Mode = 'simple';
     private complexity = 3; // 1..5 Balanced — only used in simple mode
+    private showTrain = true;
     private saveEnabled = false;
 
-    constructor(containerId: string, onGenerate: OnGenerateCallback, onSave?: () => void) {
+    constructor(containerId: string, onGenerate: OnGenerateCallback, onSave?: () => void);
+    constructor(containerId: string, callbacks: SidebarCallbacks);
+    constructor(
+        containerId: string,
+        onGenerateOrCallbacks: OnGenerateCallback | SidebarCallbacks,
+        onSave?: () => void,
+    ) {
         const el = document.getElementById(containerId);
         if (!el) throw new Error(`Sidebar container ${containerId} not found`);
         this.container = el;
-        this.onGenerate = onGenerate;
-        this.onSave = onSave ?? null;
+        if (typeof onGenerateOrCallbacks === 'function') {
+            this.onGenerate = onGenerateOrCallbacks;
+            this.onSave = onSave ?? null;
+            this.onShowTrainChange = null;
+        } else {
+            this.onGenerate = onGenerateOrCallbacks.onGenerate;
+            this.onSave = onGenerateOrCallbacks.onSave ?? null;
+            this.onShowTrainChange = onGenerateOrCallbacks.onShowTrainChange ?? null;
+        }
         this.restore();
         this.render();
+    }
+
+    /** Whether the animated train is shown on the track (sticky with other settings). */
+    public isShowTrain(): boolean {
+        return this.showTrain;
     }
 
     /** Reload the last-used settings so a browser refresh keeps the selection. */
@@ -69,6 +95,9 @@ export class Sidebar {
             if (Number.isFinite(s.elevation)) this.elevation = Math.min(1, Math.max(0, s.elevation));
             if (s.mode === 'simple' || s.mode === 'advanced') this.mode = s.mode;
             if (Number.isFinite(s.complexity)) this.complexity = Math.min(5, Math.max(1, Math.round(s.complexity)));
+            // Prefer showTrain; accept the older trainMoving key from a prior build.
+            if (typeof s.showTrain === 'boolean') this.showTrain = s.showTrain;
+            else if (typeof s.trainMoving === 'boolean') this.showTrain = s.trainMoving;
         } catch {
             // Corrupt or unavailable storage: keep defaults.
         }
@@ -83,6 +112,7 @@ export class Sidebar {
                 elevation: this.elevation,
                 mode: this.mode,
                 complexity: this.complexity,
+                showTrain: this.showTrain,
             }));
         } catch {
             // Storage unavailable: selections just won't stick.
@@ -218,6 +248,12 @@ export class Sidebar {
           ☆ Save to Favorites
         </button>` : ''}
 
+        <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" id="train-toggle" ${this.showTrain ? 'checked' : ''}
+            class="h-4 w-4 rounded border-gray-300 text-blue-600 accent-blue-600 cursor-pointer" />
+          Show train
+        </label>
+
         <div id="usage" class="space-y-1 pt-2 border-t border-gray-200"></div>
 
         <a href="https://github.com/tanvach/RailCubeAutoGen"
@@ -251,6 +287,12 @@ export class Sidebar {
 
         q<HTMLButtonElement>('#save-btn')?.addEventListener('click', () => {
             this.onSave?.();
+        });
+
+        q<HTMLInputElement>('#train-toggle')?.addEventListener('change', (e) => {
+            this.showTrain = (e.target as HTMLInputElement).checked;
+            this.persist();
+            this.onShowTrainChange?.(this.showTrain);
         });
 
         this.container.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((btn) => {

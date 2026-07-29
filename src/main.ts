@@ -138,26 +138,31 @@ const favorites = new Favorites('favorites-panel', (saved) => {
     showToast(`Loaded "${saved.name}"`);
 });
 
-const sidebar = new Sidebar('sidebar-container', (state) => {
-    sidebar.setLoading(true);
-    loadingOverlay.classList.remove('hidden');
-    loadingText.textContent = 'Searching for a closed loop…';
+const sidebar = new Sidebar('sidebar-container', {
+    onGenerate: (state) => {
+        sidebar.setLoading(true);
+        loadingOverlay.classList.remove('hidden');
+        loadingText.textContent = 'Searching for a closed loop…';
 
-    const req: WorkerRequest = {
-        inventory: state.inventory,
-        options: {
-            minPieces: state.minPieces,
-            maxPieces: state.maxPieces,
-            elevation: state.elevation,
-        },
-    };
-    worker.postMessage(req);
-}, () => {
-    if (!currentTrack) return;
-    const thumbnail = scene?.captureThumbnail() ?? '';
-    const item = favorites.add('', currentTrack, thumbnail);
-    showToast(`Saved "${item.name}" to favorites`);
+        const req: WorkerRequest = {
+            inventory: state.inventory,
+            options: {
+                minPieces: state.minPieces,
+                maxPieces: state.maxPieces,
+                elevation: state.elevation,
+            },
+        };
+        worker.postMessage(req);
+    },
+    onSave: () => {
+        if (!currentTrack) return;
+        const thumbnail = scene?.captureThumbnail() ?? '';
+        const item = favorites.add('', currentTrack, thumbnail);
+        showToast(`Saved "${item.name}" to favorites`);
+    },
+    onShowTrainChange: (on) => scene?.setShowTrain(on),
 });
+scene?.setShowTrain(sidebar.isShowTrain());
 
 // Restore the last generated/loaded track across refresh; fall back to the
 // manual S-course demo on a first visit.

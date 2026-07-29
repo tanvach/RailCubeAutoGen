@@ -25,6 +25,7 @@ export class SceneController {
     private trainDist = 0;
     private lastTime = performance.now();
     public trainSpeed = 1.6; // cells per second
+    private showTrain = true;
 
     constructor(container: HTMLElement) {
         this.scene.background = new THREE.Color(0xe8eef4);
@@ -105,9 +106,20 @@ export class SceneController {
 
         // Rail path following traversal order.
         this.buildPath(track);
-        this.train.visible = this.path.length > 1;
+        this.syncTrainVisibility();
 
         this.fitCamera();
+    }
+
+    /** Show or hide the animated train (hidden = no distraction on the track). */
+    public setShowTrain(on: boolean) {
+        this.showTrain = on;
+        this.syncTrainVisibility();
+    }
+
+    private syncTrainVisibility() {
+        this.train.visible = this.showTrain && this.path.length > 1;
+        if (this.train.visible) this.placeTrain(this.trainDist);
     }
 
     private addSupports(pieces: PiecePlacement[]) {

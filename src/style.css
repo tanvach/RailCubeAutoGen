@@ -2,6 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hidden on screen; shown only when printing. Avoid Tailwind `hidden` —
+   its !important fights the print rule. */
 .print-only {
     display: none;
 }
@@ -22,14 +24,16 @@
         background: white !important;
     }
 
-    #app > div {
+    #app > div,
+    #app .print-column {
         display: block !important;
         height: auto !important;
         overflow: visible !important;
+        max-height: none !important;
     }
 
     #print-view {
-        padding: 0.5rem 0 1rem;
+        padding: 0.35in 0.4in 0.15in;
         page-break-inside: avoid;
     }
 
@@ -39,12 +43,15 @@
         max-height: 55vh;
         object-fit: contain;
         margin: 0 auto;
+        border: 1px solid #e5e7eb;
+        border-radius: 4px;
     }
 
     #instructions-container {
         max-height: none !important;
         overflow: visible !important;
         border: none !important;
+        padding: 0 0.15in 0.35in;
     }
 
     .chip-arrow {

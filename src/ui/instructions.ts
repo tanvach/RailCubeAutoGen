@@ -6,11 +6,13 @@ import { PiecePlacement, Step, InventoryKey, inventoryKeyOf } from '../core/piec
  */
 export class Instructions {
     private container: HTMLElement;
+    private onPrint: (() => void) | null = null;
 
-    constructor(containerId: string) {
+    constructor(containerId: string, onPrint?: () => void) {
         const el = document.getElementById(containerId);
         if (!el) throw new Error(`Instructions container ${containerId} not found`);
         this.container = el;
+        this.onPrint = onPrint ?? null;
     }
 
     public renderEmpty(message: string) {
@@ -44,6 +46,10 @@ export class Instructions {
         </div>
       </div>
     `;
+
+        this.container.querySelector('#print-btn')?.addEventListener('click', () => {
+            this.onPrint?.();
+        });
     }
 
     private chip(piece: PiecePlacement, step: Step, crossNth: number): string {
@@ -81,8 +87,8 @@ export class Instructions {
         return (Object.keys(names) as InventoryKey[])
             .filter((k) => counts[k])
             .map((k) => `<span><b>${counts[k]}</b> × ${names[k]}</span>`)
-            .join('') + `<span class="ml-auto no-print">
-              <button onclick="window.print()" class="text-blue-600 hover:underline">Print</button>
-            </span>`;
+            .join('') + (this.onPrint ? `<span class="ml-auto no-print">
+              <button type="button" id="print-btn" class="text-blue-600 hover:underline">Print</button>
+            </span>` : '');
     }
 }

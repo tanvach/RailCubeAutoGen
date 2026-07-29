@@ -51,11 +51,24 @@ describe('Sidebar', () => {
         expect(document.getElementById('usage')?.textContent).toContain('9 / 15');
     });
 
+    it('defaults to Simple mode at Balanced complexity', () => {
+        const spy = vi.fn();
+        new Sidebar('sidebar-root', spy);
+        expect(document.querySelector('#complexity-slider')).toBeTruthy();
+        expect((document.querySelector('#complexity-slider') as HTMLInputElement).value).toBe('3');
+        expect(document.getElementById('complexity-val')?.textContent).toBe('Balanced');
+        (document.querySelector('#generate-btn') as HTMLButtonElement).click();
+        const state = spy.mock.calls[0][0];
+        expect(state.maxPieces).toBe(21); // midpoint of 10..32 for starter
+        expect(state.elevation).toBeCloseTo(0.45);
+    });
+
     it('persists selections across instances (browser refresh)', () => {
         new Sidebar('sidebar-root', () => {});
         const select = document.querySelector('#kit-select') as HTMLSelectElement;
         select.value = 'deluxe';
         select.dispatchEvent(new Event('change'));
+        (document.querySelector('[data-mode="advanced"]') as HTMLButtonElement).click();
         const slider = document.querySelector('#size-slider') as HTMLInputElement;
         slider.value = '25';
         slider.dispatchEvent(new Event('input'));
@@ -65,6 +78,7 @@ describe('Sidebar', () => {
         const spy = vi.fn();
         new Sidebar('sidebar-root', spy);
         expect((document.querySelector('#kit-select') as HTMLSelectElement).value).toBe('deluxe');
+        expect(document.querySelector('#size-slider')).toBeTruthy();
         (document.querySelector('#generate-btn') as HTMLButtonElement).click();
         const state = spy.mock.calls[0][0];
         expect(state.inventory.straight).toBe(31);
@@ -74,7 +88,6 @@ describe('Sidebar', () => {
     it('simple mode maps one complexity dial to size and elevation', () => {
         const spy = vi.fn();
         new Sidebar('sidebar-root', spy);
-        (document.querySelector('[data-mode="simple"]') as HTMLButtonElement).click();
         const dial = document.querySelector('#complexity-slider') as HTMLInputElement;
         expect(dial).toBeTruthy();
 
@@ -92,11 +105,13 @@ describe('Sidebar', () => {
         expect(high.maxPieces).toBe(32); // whole starter kit + start cube
         expect(high.elevation).toBeCloseTo(0.9);
         expect(high.maxPieces).toBeGreaterThan(low.maxPieces);
+    });
 
-        // Mode itself is sticky too.
-        document.body.innerHTML = '<div id="sidebar-root"></div>';
+    it('renders a link to the GitHub repository', () => {
         new Sidebar('sidebar-root', () => {});
-        expect(document.querySelector('#complexity-slider')).toBeTruthy();
+        const link = document.querySelector('a[href="https://github.com/tanvach/RailCubeAutoGen"]');
+        expect(link).toBeTruthy();
+        expect(link?.textContent).toContain('View source');
     });
 });
 

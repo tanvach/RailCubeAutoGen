@@ -16,7 +16,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <div id="favorites-panel" class="px-5 pb-5"></div>
     </div>
 
-    <div class="flex-1 relative flex flex-col min-w-0">
+    <div class="print-column flex-1 relative flex flex-col min-w-0">
+      <!-- Snapshot kept in sync with the viewport so print preview always has it. -->
+      <div id="print-view" class="print-only">
+        <img id="print-snapshot" alt="Track preview" />
+      </div>
       <div id="canvas-container" class="flex-1 min-h-0 relative overflow-hidden no-print">
         <div id="loading-overlay" class="absolute inset-0 bg-black/25 flex items-center justify-center hidden z-20">
           <div class="bg-white px-6 py-4 rounded-xl shadow-lg text-center">
@@ -26,10 +30,6 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         </div>
         <div id="toast" class="absolute left-1/2 -translate-x-1/2 top-4 bg-gray-800 text-white
           text-sm px-4 py-2 rounded-lg shadow hidden z-30"></div>
-      </div>
-      <!-- WebGL canvases often print blank; we snapshot into this img on print. -->
-      <div id="print-view" class="print-only hidden">
-        <img id="print-snapshot" alt="Track preview" />
       </div>
       <div id="instructions-container" class="shrink-0 max-h-[38%] overflow-y-auto bg-white border-t border-gray-200 print-block"></div>
     </div>
@@ -48,7 +48,34 @@ try {
         Generated tracks still appear as assembly instructions below.
       </div>`;
 }
-const instructions = new Instructions('instructions-container');
+
+const printSnapshot = document.getElementById('print-snapshot') as HTMLImageElement;
+
+/**
+ * Keep a print-ready JPEG of the viewport (WebGL canvases often print blank).
+ * Skip capture when the canvas is hidden / zero-sized — that happens once
+ * print media kicks in, and overwriting here would blank the preview.
+ */
+const refreshPrintSnapshot = () => {
+    if (!scene || !currentTrack) {
+        printSnapshot.removeAttribute('src');
+        return;
+    }
+    const host = document.getElementById('canvas-container');
+    if (!host || host.clientWidth < 2 || host.clientHeight < 2) return;
+    printSnapshot.src = scene.captureThumbnail(1280, 800);
+};
+
+const printTrack = () => {
+    refreshPrintSnapshot();
+    // Let the browser paint the <img> before opening the print dialog /
+    // preview — otherwise Safari/Chrome often show a blank slot.
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => window.print());
+    });
+};
+
+const instructions = new Instructions('instructions-container', printTrack);
 const loadingOverlay = document.getElementById('loading-overlay')!;
 const loadingText = document.getElementById('loading-text')!;
 const toast = document.getElementById('toast')!;
@@ -62,20 +89,14 @@ const applyTrack = (track: TrackData) => {
     sidebar.setUsage(usedInventory(track.pieces));
     sidebar.setSaveEnabled(true);
     saveLastTrack(track);
+    // Defer one frame so Three.js has drawn the new meshes before we capture.
+    requestAnimationFrame(() => refreshPrintSnapshot());
 };
 
-// Snapshot the 3D view into a print-only <img> — WebGL canvases often print blank.
-const printSnapshot = document.getElementById('print-snapshot') as HTMLImageElement;
-window.addEventListener('beforeprint', () => {
-    if (!scene || !currentTrack) {
-        printSnapshot.removeAttribute('src');
-        return;
-    }
-    printSnapshot.src = scene.captureThumbnail(1280, 800);
-});
-window.addEventListener('afterprint', () => {
-    printSnapshot.removeAttribute('src');
-});
+// Also refresh if the user prints via the system menu (⌘P) instead of our button.
+// Do NOT listen to matchMedia('print') — by then the canvas is already
+// display:none and a capture would overwrite the good snapshot with blank.
+window.addEventListener('beforeprint', refreshPrintSnapshot);
 
 let toastTimer: number | undefined;
 const showToast = (msg: string) => {

@@ -1,0 +1,283 @@
+import { Inventory, InventoryKey, STARTER_SET, DELUXE_SET } from '../core/pieces';
+
+export interface SidebarState {
+    inventory: Inventory;
+    minPieces: number;
+    maxPieces: number;
+    elevation: number;
+}
+
+type OnGenerateCallback = (state: SidebarState) => void;
+type Mode = 'simple' | 'advanced';
+
+const KITS: Record<string, Inventory> = {
+    starter: STARTER_SET,
+    deluxe: DELUXE_SET,
+};
+
+const SETTINGS_KEY = 'railcube.settings.v1';
+
+/** One-word feel for each complexity notch (1..5). */
+const COMPLEXITY_LABELS = ['Cozy loop', 'Easy', 'Balanced', 'Twisty', 'Wild'];
+
+const INV_LABELS: Record<InventoryKey, string> = {
+    straight: 'Straight (yellow)',
+    curve: 'L/R Curve (blue/green)',
+    inner: 'Inner Curve (orange)',
+    outer: 'Outer Curve (red)',
+    cross: 'Cross (purple)',
+};
+
+export class Sidebar {
+    private container: HTMLElement;
+    private onGenerate: OnGenerateCallback;
+    private onSave: (() => void) | null;
+    private kit: 'starter' | 'deluxe' | 'custom' = 'starter';
+    private inventory: Inventory = { ...STARTER_SET };
+    private size = 20;
+    private elevation = 0.3;
+    private mode: Mode = 'advanced';
+    private complexity = 3; // 1..5, only used in simple mode
+    private saveEnabled = false;
+
+    constructor(containerId: string, onGenerate: OnGenerateCallback, onSave?: () => void) {
+        const el = document.getElementById(containerId);
+        if (!el) throw new Error(`Sidebar container ${containerId} not found`);
+        this.container = el;
+        this.onGenerate = onGenerate;
+        this.onSave = onSave ?? null;
+        this.restore();
+        this.render();
+    }
+
+    /** Reload the last-used settings so a browser refresh keeps the selection. */
+    private restore() {
+        try {
+            const raw = localStorage.getItem(SETTINGS_KEY);
+            if (!raw) return;
+            const s = JSON.parse(raw);
+            if (s.kit === 'starter' || s.kit === 'deluxe' || s.kit === 'custom') this.kit = s.kit;
+            if (this.kit === 'custom' && s.inventory && typeof s.inventory === 'object') {
+                for (const k of Object.keys(this.inventory) as InventoryKey[]) {
+                    const v = Number(s.inventory[k]);
+                    if (Number.isFinite(v)) this.inventory[k] = Math.max(0, Math.floor(v));
+                }
+            } else if (this.kit !== 'custom') {
+                this.inventory = { ...KITS[this.kit] };
+            }
+            if (Number.isFinite(s.size)) this.size = Math.max(8, Math.floor(s.size));
+            if (Number.isFinite(s.elevation)) this.elevation = Math.min(1, Math.max(0, s.elevation));
+            if (s.mode === 'simple' || s.mode === 'advanced') this.mode = s.mode;
+            if (Number.isFinite(s.complexity)) this.complexity = Math.min(5, Math.max(1, Math.round(s.complexity)));
+        } catch {
+            // Corrupt or unavailable storage: keep defaults.
+        }
+    }
+
+    private persist() {
+        try {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+                kit: this.kit,
+                inventory: this.inventory,
+                size: this.size,
+                elevation: this.elevation,
+                mode: this.mode,
+                complexity: this.complexity,
+            }));
+        } catch {
+            // Storage unavailable: selections just won't stick.
+        }
+    }
+
+    public getState(): SidebarState {
+        // The slider max tracks the inventory at render time, but custom
+        // inventory edits don't re-render; clamp so size never exceeds what
+        // the pieces on hand allow (+1 for the start cube).
+        const total = Object.values(this.inventory).reduce((a, b) => a + b, 1);
+        let size = this.size;
+        let elevation = this.elevation;
+        if (this.mode === 'simple') {
+            // One dial: complexity 1..5 scales both track size (small -> whole
+            // kit) and elevation (flat -> very 3D).
+            const t = (this.complexity - 1) / 4;
+            size = Math.round(10 + (total - 10) * t);
+            elevation = Math.round(t * 90) / 100; // 0 .. 0.9
+        }
+        const maxPieces = Math.max(8, Math.min(size, total));
+        return {
+            inventory: { ...this.inventory },
+            minPieces: Math.min(Math.max(6, Math.floor(maxPieces * 0.6)), maxPieces),
+            maxPieces,
+            elevation,
+        };
+    }
+
+    public setLoading(isLoading: boolean) {
+        const btn = this.container.querySelector('#generate-btn') as HTMLButtonElement | null;
+        if (btn) {
+            btn.disabled = isLoading;
+            btn.textContent = isLoading ? 'Generating…' : 'Generate Track';
+            btn.classList.toggle('opacity-60', isLoading);
+        }
+    }
+
+    public setSaveEnabled(enabled: boolean) {
+        this.saveEnabled = enabled;
+        const btn = this.container.querySelector('#save-btn') as HTMLButtonElement | null;
+        if (btn) btn.disabled = !enabled;
+    }
+
+    public setUsage(used: Inventory | null) {
+        const el = this.container.querySelector('#usage');
+        if (!el) return;
+        if (!used) {
+            el.innerHTML = '';
+            return;
+        }
+        el.innerHTML = (Object.keys(INV_LABELS) as InventoryKey[])
+            .filter((k) => this.inventory[k] > 0 || used[k] > 0)
+            .map((k) => `
+              <div class="flex justify-between text-xs text-gray-600">
+                <span>${INV_LABELS[k]}</span>
+                <span class="font-mono">${used[k]} / ${this.inventory[k]}</span>
+              </div>`)
+            .join('');
+    }
+
+    private render() {
+        const maxTotal = Object.values(this.inventory).reduce((a, b) => a + b, 1);
+        this.size = Math.min(this.size, maxTotal);
+
+        this.container.innerHTML = `
+      <div class="space-y-5">
+        <div>
+          <h1 class="text-lg font-extrabold text-gray-800">Rail Cube <span class="text-blue-500">Auto-Gen</span></h1>
+          <p class="text-xs text-gray-500 mt-1">Procedural closed loops for the Rail Cube magnetic train set.</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Kit</label>
+          <select id="kit-select" class="block w-full rounded-md border border-gray-300 bg-white shadow-sm text-sm p-2">
+            <option value="starter" ${this.kit === 'starter' ? 'selected' : ''}>Starter Set</option>
+            <option value="deluxe" ${this.kit === 'deluxe' ? 'selected' : ''}>Deluxe Set</option>
+            <option value="custom" ${this.kit === 'custom' ? 'selected' : ''}>Custom Inventory</option>
+          </select>
+        </div>
+
+        <div id="custom-inventory" class="${this.kit === 'custom' ? '' : 'hidden'} space-y-2">
+          ${(Object.keys(INV_LABELS) as InventoryKey[]).map((k) => `
+            <label class="flex items-center justify-between text-xs text-gray-600">
+              <span>${INV_LABELS[k]}</span>
+              <input data-inv="${k}" type="number" min="0" max="99" value="${this.inventory[k]}"
+                class="w-16 rounded border border-gray-300 p-1 text-right text-sm" />
+            </label>`).join('')}
+        </div>
+
+        <div class="grid grid-cols-2 gap-1 bg-gray-100 rounded-lg p-1 text-sm font-semibold">
+          <button data-mode="simple" class="rounded-md py-1 transition
+            ${this.mode === 'simple' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}">Simple</button>
+          <button data-mode="advanced" class="rounded-md py-1 transition
+            ${this.mode === 'advanced' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}">Advanced</button>
+        </div>
+
+        ${this.mode === 'simple' ? `
+        <div>
+          <label class="block text-sm font-semibold text-gray-700">Complexity
+            <span id="complexity-val" class="font-mono text-blue-600">${COMPLEXITY_LABELS[this.complexity - 1]}</span>
+          </label>
+          <input type="range" id="complexity-slider" min="1" max="5" step="1" value="${this.complexity}"
+            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500">
+          <p class="text-[11px] text-gray-400 mt-1">One dial: sets track size and elevation together.</p>
+        </div>` : `
+        <div>
+          <label class="block text-sm font-semibold text-gray-700">Track size
+            <span id="size-val" class="font-mono text-blue-600">${this.size}</span> pieces
+          </label>
+          <input type="range" id="size-slider" min="8" max="${maxTotal}" value="${this.size}"
+            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500">
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700">Elevation
+            <span id="elevation-val" class="font-mono text-orange-600">${Math.round(this.elevation * 100)}%</span>
+            <span class="text-xs font-normal text-gray-500">(flat ↔ 3D)</span>
+          </label>
+          <input type="range" id="elevation-slider" min="0" max="1" step="0.1" value="${this.elevation}"
+            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500">
+        </div>`}
+
+        <button id="generate-btn"
+          class="w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition shadow">
+          Generate Track
+        </button>
+
+        ${this.onSave ? `
+        <button id="save-btn" ${this.saveEnabled ? '' : 'disabled'}
+          class="w-full bg-white text-blue-600 font-semibold py-2 px-4 rounded-lg border border-blue-300
+            hover:bg-blue-50 transition disabled:opacity-40 disabled:cursor-not-allowed">
+          ☆ Save to Favorites
+        </button>` : ''}
+
+        <div id="usage" class="space-y-1 pt-2 border-t border-gray-200"></div>
+      </div>
+    `;
+        this.attachEvents();
+    }
+
+    private attachEvents() {
+        const q = <T extends Element>(sel: string) => this.container.querySelector(sel) as T | null;
+
+        q<HTMLButtonElement>('#generate-btn')?.addEventListener('click', () => {
+            this.onGenerate(this.getState());
+        });
+
+        q<HTMLButtonElement>('#save-btn')?.addEventListener('click', () => {
+            this.onSave?.();
+        });
+
+        this.container.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                this.mode = btn.dataset.mode as Mode;
+                this.persist();
+                this.render();
+            });
+        });
+
+        q<HTMLInputElement>('#complexity-slider')?.addEventListener('input', (e) => {
+            this.complexity = parseInt((e.target as HTMLInputElement).value, 10);
+            const el = q<HTMLElement>('#complexity-val');
+            if (el) el.textContent = COMPLEXITY_LABELS[this.complexity - 1];
+            this.persist();
+        });
+
+        q<HTMLInputElement>('#size-slider')?.addEventListener('input', (e) => {
+            this.size = parseInt((e.target as HTMLInputElement).value, 10);
+            const el = q<HTMLElement>('#size-val');
+            if (el) el.textContent = String(this.size);
+            this.persist();
+        });
+
+        q<HTMLInputElement>('#elevation-slider')?.addEventListener('input', (e) => {
+            this.elevation = parseFloat((e.target as HTMLInputElement).value);
+            const el = q<HTMLElement>('#elevation-val');
+            if (el) el.textContent = `${Math.round(this.elevation * 100)}%`;
+            this.persist();
+        });
+
+        q<HTMLSelectElement>('#kit-select')?.addEventListener('change', (e) => {
+            const val = (e.target as HTMLSelectElement).value as typeof this.kit;
+            this.kit = val;
+            if (val !== 'custom') this.inventory = { ...KITS[val] };
+            this.persist();
+            this.render();
+        });
+
+        this.container.querySelectorAll<HTMLInputElement>('[data-inv]').forEach((input) => {
+            input.addEventListener('input', () => {
+                const k = input.dataset.inv as InventoryKey;
+                this.inventory[k] = Math.max(0, parseInt(input.value || '0', 10));
+                this.persist();
+            });
+        });
+    }
+}

@@ -65,8 +65,12 @@ export interface TrackState {
   the old scale-flip approach that double-inverted the Down block). Multi-cell pieces are
   scaled ~2% in about their footprint center (`SEAM`) so chained pieces show a seam instead
   of merging into one solid. Support holes (round) are placed one per solid cell per flat
-  face, matching the physical pieces. Steel strips sit 0.03 below the shoulder tops and
-  nearly fill the groove, like the photos. Blue/green curves are fully double-sided
+  face, matching the physical pieces. Face decals (holes, sockets) go through one helper
+  (`faceDisc`) that takes a point **on** the face plus its outward normal and guarantees a
+  fixed `DECAL_PROUD` protrusion — hand-tuned per-call offsets are how decals end up
+  coplanar with the face (z-fighting flicker) or buried (invisible). Metal strip end caps
+  are likewise inset a hair from piece faces. Steel strips sit 0.03 below the shoulder tops
+  and nearly fill the groove, like the photos. Blue/green curves are fully double-sided
   (shoulders, strip, and holes mirrored on both faces — the piece is flippable). The START
   sticker is a single capsule on one shoulder with a drawn arrow (not a font glyph)
   pointing at the exit face.

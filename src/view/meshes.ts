@@ -78,22 +78,36 @@ const knob = (x: number, y: number, z: number, axis: THREE.Vector3) => {
     return g;
 };
 
-const socket = (x: number, y: number, z: number, axis: THREE.Vector3) => {
-    // Protrudes slightly so the outer face is never coplanar with the piece
-    // face behind it (coplanar faces z-fight).
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.03, 20), MATS.socket);
-    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.clone().normalize());
-    m.position.set(x, y, z);
+/**
+ * How far face decals (holes, sockets) stand proud of the surface they mark.
+ * Must be comfortably above depth-buffer noise at typical viewing distances,
+ * or the decal flickers (z-fights) while orbiting.
+ */
+const DECAL_PROUD = 0.012;
+
+/**
+ * Disc embedded in a face. `(x, y, z)` is a point ON the face and `out` its
+ * outward normal; the helper positions the disc so its visible cap always
+ * clears the face by exactly DECAL_PROUD. Callers pass true face coordinates —
+ * hand-tuned offsets are how decals end up coplanar (flicker) or buried
+ * (invisible / popping through).
+ */
+const faceDisc = (radius: number, mat: THREE.Material, x: number, y: number, z: number, out: THREE.Vector3) => {
+    const h = 0.06;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, h, radius > 0.1 ? 20 : 14), mat);
+    const n = out.clone().normalize();
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+    m.position.set(x, y, z).addScaledVector(n, DECAL_PROUD - h / 2);
     return m;
 };
 
+/** Gray connector socket disc on an entry face. */
+const socket = (x: number, y: number, z: number, out: THREE.Vector3) =>
+    faceDisc(0.27, MATS.socket, x, y, z, out);
+
 /** Small dark support hole (round, like the photos). */
-const hole = (x: number, y: number, z: number, axis: THREE.Vector3) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.02, 14), MATS.hole);
-    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.clone().normalize());
-    m.position.set(x, y, z);
-    return m;
-};
+const hole = (x: number, y: number, z: number, out: THREE.Vector3) =>
+    faceDisc(0.055, MATS.hole, x, y, z, out);
 
 /** Extrude a 2D shape lying in the local XZ plane, spanning ly0..ly1 vertically. */
 const extrudeFlat = (shape: THREE.Shape, ly0: number, ly1: number, mat: THREE.Material) => {
@@ -135,6 +149,14 @@ const GROOVE_W = 0.32;      // groove width
 const SHOULDER_TOP = 0.48;  // top surface height
 const GROOVE_FLOOR = 0.38;  // groove floor height
 
+// Outward face normals for decal placement.
+const PX = new THREE.Vector3(1, 0, 0);
+const NX = new THREE.Vector3(-1, 0, 0);
+const PY = new THREE.Vector3(0, 1, 0);
+const NY = new THREE.Vector3(0, -1, 0);
+const PZ = new THREE.Vector3(0, 0, 1);
+const NZ = new THREE.Vector3(0, 0, -1);
+
 /** Straight groove segment along X: shoulders + metal strip, spanning x0..x1. */
 const grooveAlongX = (g: THREE.Group, x0: number, x1: number, mat: THREE.Material, zc = 0) => {
     const len = x1 - x0;
@@ -152,11 +174,11 @@ const buildStraightLike = (mat: THREE.Material, isStart: boolean) => {
     const g = new THREE.Group();
     g.add(box(0.98, GROOVE_FLOOR + 0.48, 0.96, mat, 0, (GROOVE_FLOOR - 0.48) / 2, 0, 0.05));
     grooveAlongX(g, -0.49, 0.49, mat);
-    g.add(knob(0.5, 0, 0, new THREE.Vector3(1, 0, 0)));
-    g.add(socket(-0.49, 0, 0, new THREE.Vector3(1, 0, 0)));
-    g.add(hole(0, 0, 0.475, new THREE.Vector3(0, 0, 1)));
-    g.add(hole(0, 0, -0.475, new THREE.Vector3(0, 0, 1)));
-    g.add(hole(0, -0.475, 0, new THREE.Vector3(0, 1, 0)));
+    g.add(knob(0.5, 0, 0, PX));
+    g.add(socket(-0.49, 0, 0, NX));       // entry face x = -0.49
+    g.add(hole(0, 0, 0.48, PZ));          // side faces z = ±0.48
+    g.add(hole(0, 0, -0.48, NZ));
+    g.add(hole(0, -0.48, 0, NY));         // bottom face y = -0.48
 
     if (isStart) {
         // The real cube has one capsule sticker on a single shoulder, reading
@@ -196,7 +218,7 @@ const buildStraightLike = (mat: THREE.Material, isStart: boolean) => {
                 new THREE.MeshBasicMaterial({ map: tex, transparent: true }),
             );
             label.rotation.x = -Math.PI / 2;
-            label.position.set(0, SHOULDER_TOP + 0.004, -0.32);
+            label.position.set(0, SHOULDER_TOP + DECAL_PROUD, -0.32);
             g.add(label);
         }
     }
@@ -234,9 +256,9 @@ const buildCurve = (left: boolean) => {
     g.add(extrudeFlat(shoulderOut, -SHOULDER_TOP, -GROOVE_FLOOR, botMat));
     g.add(extrudeFlat(stripRing, -(SHOULDER_TOP - 0.03), -GROOVE_FLOOR, MATS.metal));
 
-    // Connector knob at the exit face, socket at entry.
+    // Connector knob at the exit face, socket at entry (face x = -0.5).
     g.add(knob(1.0, 0, sZ * 1.53, new THREE.Vector3(0, 0, sZ)));
-    g.add(socket(-0.49, 0, 0, new THREE.Vector3(1, 0, 0)));
+    g.add(socket(-0.5, 0, 0, NX));
 
     // Shoulder holes on both faces, like the photos.
     for (const [r, angles] of [[1.82, [0.15, 0.42, 0.68, 0.95]], [1.18, [0.3, 0.85]]] as const) {
@@ -244,8 +266,8 @@ const buildCurve = (left: boolean) => {
             const ang = a0 + (a1 - a0) * t;
             const x = -0.5 + r * Math.cos(ang);
             const w = pw + r * Math.sin(ang);
-            g.add(hole(x, SHOULDER_TOP, -w, new THREE.Vector3(0, 1, 0)));
-            g.add(hole(x, -SHOULDER_TOP, -w, new THREE.Vector3(0, 1, 0)));
+            g.add(hole(x, SHOULDER_TOP, -w, PY));
+            g.add(hole(x, -SHOULDER_TOP, -w, NY));
         }
     }
     return g;
@@ -283,29 +305,31 @@ const buildInner = () => {
     g.add(extrudeProfile(pm, GROOVE_W + 0.04, MATS.inner));
 
     // Metal strip: embedded in the groove floor (r 1.11), face 0.03 below
-    // the carve surface (r 1.03) like the photos.
+    // the carve surface (r 1.03) like the photos. The arc is inset a hair at
+    // both ends so the strip's end caps never land exactly on the piece's
+    // entry (x = -0.5) and top (y = 1.5) faces — coplanar metal-vs-orange
+    // faces flicker.
+    const aIn = 0.005;
     const strip = new THREE.Shape();
-    strip.absarc(-0.5, 1.5, 1.11, 0, -Math.PI / 2, true);
-    strip.absarc(-0.5, 1.5, 1.03, -Math.PI / 2, 0, false);
+    strip.absarc(-0.5, 1.5, 1.11, -aIn, -Math.PI / 2 + aIn, true);
+    strip.absarc(-0.5, 1.5, 1.03, -Math.PI / 2 + aIn, -aIn, false);
     strip.closePath();
     g.add(extrudeProfile(strip, GROOVE_W - 0.06, MATS.metal));
 
-    g.add(knob(1.0, 1.5, 0, new THREE.Vector3(0, 1, 0)));
-    g.add(socket(-0.49, 0, 0, new THREE.Vector3(1, 0, 0)));
+    g.add(knob(1.0, 1.5, 0, PY));
+    g.add(socket(-0.5, 0, 0, NX));           // entry face x = -0.5
 
     // Support holes: one per solid cell on each flat face, like the physical
-    // piece. Solid cell centers: (0,0), (1,0), (1,1).
-    const zAxis = new THREE.Vector3(0, 0, 1);
-    const yAxis = new THREE.Vector3(0, 1, 0);
-    const xAxis = new THREE.Vector3(1, 0, 0);
+    // piece. Solid cell centers: (0,0), (1,0), (1,1). Faces: sides z = ±0.48,
+    // bottom y = -0.49, far end x = 1.5.
     for (const [cx, cy] of [[0, 0], [1, 0], [1, 1]] as const) {
-        g.add(hole(cx, cy, 0.475, zAxis));   // front profile face
-        g.add(hole(cx, cy, -0.475, zAxis));  // back profile face
+        g.add(hole(cx, cy, 0.48, PZ));       // front profile face
+        g.add(hole(cx, cy, -0.48, NZ));      // back profile face
     }
-    g.add(hole(0, -0.48, 0, yAxis));         // bottom, cell 0
-    g.add(hole(1, -0.48, 0, yAxis));         // bottom, cell 1
-    g.add(hole(1.485, 0, 0, xAxis));         // far end, lower cell
-    g.add(hole(1.485, 1, 0, xAxis));         // far end, upper cell
+    g.add(hole(0, -0.49, 0, NY));            // bottom, cell 0
+    g.add(hole(1, -0.49, 0, NY));            // bottom, cell 1
+    g.add(hole(1.5, 0, 0, PX));              // far end, lower cell
+    g.add(hole(1.5, 1, 0, PX));              // far end, upper cell
     return g;
 };
 
@@ -343,23 +367,25 @@ const buildOuter = () => {
     g.add(extrudeProfile(outerProfile(0.1, -0.49), GROOVE_W + 0.04, MATS.outer));
 
     // Metal strip: embedded in the floor (r-0.11), face 0.03 below the
-    // shoulder surface (r-0.03).
+    // shoulder surface (r-0.03). Both ends stop a hair short of the entry
+    // (x = -0.5) and exit (y = -0.49) faces — coplanar metal-vs-red end caps
+    // flicker.
     const c = OUTER_C;
     const strip = new THREE.Shape();
-    strip.moveTo(-0.5, c.y + OUTER_R - 0.11);
+    strip.moveTo(-0.495, c.y + OUTER_R - 0.11);
     strip.absarc(c.x, c.y, OUTER_R - 0.11, Math.PI / 2, 0, true);
-    strip.lineTo(c.x + OUTER_R - 0.11, -0.49);
-    strip.lineTo(c.x + OUTER_R - 0.03, -0.49);
+    strip.lineTo(c.x + OUTER_R - 0.11, -0.485);
+    strip.lineTo(c.x + OUTER_R - 0.03, -0.485);
     strip.lineTo(c.x + OUTER_R - 0.03, c.y);
     strip.absarc(c.x, c.y, OUTER_R - 0.03, 0, Math.PI / 2, false);
-    strip.lineTo(-0.5, c.y + OUTER_R - 0.03);
+    strip.lineTo(-0.495, c.y + OUTER_R - 0.03);
     strip.closePath();
     g.add(extrudeProfile(strip, GROOVE_W - 0.06, MATS.metal));
 
-    g.add(knob(0, -0.52, 0, new THREE.Vector3(0, -1, 0)));
-    g.add(socket(-0.49, 0, 0, new THREE.Vector3(1, 0, 0)));
-    g.add(hole(0, 0, 0.475, new THREE.Vector3(0, 0, 1)));
-    g.add(hole(0, 0, -0.475, new THREE.Vector3(0, 0, 1)));
+    g.add(knob(0, -0.52, 0, NY));
+    g.add(socket(-0.5, 0, 0, NX));           // entry face x = -0.5
+    g.add(hole(0, 0, 0.48, PZ));             // side faces z = ±0.48
+    g.add(hole(0, 0, -0.48, NZ));
     return g;
 };
 
@@ -381,12 +407,12 @@ const buildCross = () => {
         g.add(plainBox(GROOVE_W - 0.06, 0.07, segLen, MATS.metal, 1, GROOVE_FLOOR + 0.035, zc));
     }
 
-    g.add(knob(1.5 + 0.03, 0, 0, new THREE.Vector3(1, 0, 0)));
-    g.add(socket(-0.49, 0, 0, new THREE.Vector3(1, 0, 0)));
-    g.add(knob(1, 0, 0.51, new THREE.Vector3(0, 0, 1)));
-    g.add(socket(1, 0, -0.475, new THREE.Vector3(0, 0, 1)));
-    g.add(hole(0, 0, 0.475, new THREE.Vector3(0, 0, 1)));
-    g.add(hole(0, 0, -0.475, new THREE.Vector3(0, 0, 1)));
+    g.add(knob(1.49, 0, 0, PX));             // half-embedded in exit face x = 1.49
+    g.add(socket(-0.49, 0, 0, NX));          // entry face x = -0.49
+    g.add(knob(1, 0, 0.48, PZ));             // crossing exit face z = 0.48
+    g.add(socket(1, 0, -0.48, NZ));          // crossing entry face z = -0.48
+    g.add(hole(0, 0, 0.48, PZ));             // side faces z = ±0.48
+    g.add(hole(0, 0, -0.48, NZ));
     return g;
 };
 

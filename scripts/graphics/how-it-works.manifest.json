@@ -76,9 +76,9 @@
         "Right panel is a rule schematic with opposing up arrows, not a full wall-frame placement."
       ],
       "validation": {
-        "rendered": "re-rasterized after Outer swap; amber swings visible on Straight and Outer",
+        "rendered": "rasterized at ~680px (GitHub markdown width); frame tip labels removed from cells; rail/swing labels above shared-slot row",
         "claimMap": "left/middle supported from computePlacement; right supported as schematic + photo",
-        "freshReadPriorIssue": "Curve L claimed swings without drawing them — fixed by switching to Outer"
+        "freshReadPriorIssue": "tip labels up/dir/swing sat under arrows at GitHub scale — fixed by unlabeled short arrows + external axis key / label row"
       }
     },
     {

@@ -130,22 +130,12 @@ const cellRect = (p: Projector, c: Vec3, fill: string, stroke: string, dash = fa
         (dash ? ` stroke-dasharray="4 3"` : '') + `/>`;
 };
 
-const drawFrame = (p: Projector, state: TrackState) => {
-    const c = p.center(state.cell);
-    const al = p.half * 0.95;
-    const d = p.dirScreen(state.dir, al);
-    const u = p.dirScreen(state.up, al);
-    let out = arrow(c.x, c.y, c.x + d.x, c.y + d.y, COLORS.dir, 'dir');
-    const upDrawn = arrow(c.x, c.y, c.x + u.x, c.y + u.y, COLORS.up, 'up');
-    if (upDrawn) out += upDrawn;
-    else out += outOfPlaneUp(c.x, c.y);
-    return out;
-};
-
 const drawPlacement = (
     p: Projector, placement: PiecePlacement, solidFill: string,
-    opts: { swing?: boolean } = {},
+    opts: { swing?: boolean; frameLabels?: boolean; exitFrame?: boolean } = {},
 ) => {
+    const frameLabels = opts.frameLabels !== false;
+    const exitFrame = opts.exitFrame !== false;
     let out = '';
     if (opts.swing) {
         for (const c of placement.swing) {
@@ -161,14 +151,23 @@ const drawPlacement = (
     out += `<circle cx="${r(x.x)}" cy="${r(x.y)}" r="3.5" fill="${COLORS.exit}"/>`;
     out += `<line x1="${r(e.x)}" y1="${r(e.y)}" x2="${r(x.x)}" y2="${r(x.y)}" ` +
         `stroke="${COLORS.muted}" stroke-width="1" stroke-dasharray="3 2" opacity="0.6"/>`;
-    out += drawFrame(p, placement.entry);
-    const exitAl = p.half * 0.7;
-    const ed = p.dirScreen(placement.exit.dir, exitAl);
-    const eu = p.dirScreen(placement.exit.up, exitAl);
-    out += arrow(x.x, x.y, x.x + ed.x, x.y + ed.y, COLORS.dir);
-    const upDrawn = arrow(x.x, x.y, x.x + eu.x, x.y + eu.y, COLORS.up);
-    if (!upDrawn) out += outOfPlaneUp(x.x, x.y);
-    else out += upDrawn;
+    // Compact unlabeled arrows when labels would sit inside cells (occupancy figs).
+    const al = frameLabels ? p.half * 0.95 : p.half * 0.55;
+    const d = p.dirScreen(placement.entry.dir, al);
+    const u = p.dirScreen(placement.entry.up, al);
+    out += arrow(e.x, e.y, e.x + d.x, e.y + d.y, COLORS.dir, frameLabels ? 'dir' : undefined);
+    const upDrawn = arrow(e.x, e.y, e.x + u.x, e.y + u.y, COLORS.up, frameLabels ? 'up' : undefined);
+    if (!upDrawn && frameLabels) out += outOfPlaneUp(e.x, e.y);
+    else if (upDrawn) out += upDrawn;
+    if (exitFrame) {
+        const exitAl = p.half * 0.7;
+        const ed = p.dirScreen(placement.exit.dir, exitAl);
+        const eu = p.dirScreen(placement.exit.up, exitAl);
+        out += arrow(x.x, x.y, x.x + ed.x, x.y + ed.y, COLORS.dir);
+        const exitUp = arrow(x.x, x.y, x.x + eu.x, x.y + eu.y, COLORS.up);
+        if (!exitUp && frameLabels) out += outOfPlaneUp(x.x, x.y);
+        else if (exitUp) out += exitUp;
+    }
     return out;
 };
 
@@ -416,7 +415,7 @@ const genPieceMotions = () => {
 
 const genSolidVsSwing = () => {
     const panelW = 260;
-    const panelH = 230;
+    const panelH = 248;
 
     let body = text(20, 26, 'Solids never overlap; swing cells may be shared', {
         size: 15, weight: '600',
@@ -425,6 +424,15 @@ const genSolidVsSwing = () => {
         'Amber dashed = swing. Colored fill = solid. Left/middle from computePlacement; right is the share rule.',
         { size: 11, fill: COLORS.muted, weight: '400' });
 
+    // Axis key drawn outside the crowded cell grid so labels never sit on arrows.
+    const axisKey = (ox: number, oy: number) =>
+        text(ox + 14, oy + 56, 'blue → dir', {
+            size: 10, fill: COLORS.dir, weight: '500',
+        }) +
+        text(ox + 90, oy + 56, 'green → up', {
+            size: 10, fill: COLORS.up, weight: '500',
+        });
+
     type Panel = { title: string; subtitle: string; build: (ox: number, oy: number) => string };
     const panels: Panel[] = [
         {
@@ -432,15 +440,17 @@ const genSolidVsSwing = () => {
             subtitle: '1 solid + 1 swing above',
             build: (ox, oy) => {
                 const placement = computePlacement('straight', START_STATE);
-                const p = sideView(ox + 50, oy + 56, 40, 1.5);
-                let out = '';
+                const p = sideView(ox + 50, oy + 72, 36, 1.5);
+                let out = axisKey(ox, oy);
                 for (const c of [v(0, 0, 0), v(0, 1, 0), v(1, 0, 0)]) {
                     const pt = p.center(c);
-                    out += `<rect x="${r(pt.x - p.half)}" y="${r(pt.y - p.half)}" width="40" height="40" ` +
+                    out += `<rect x="${r(pt.x - p.half)}" y="${r(pt.y - p.half)}" width="36" height="36" ` +
                         `fill="none" stroke="${COLORS.grid}"/>`;
                 }
-                out += drawPlacement(p, placement, COLORS.yellow, { swing: true });
-                out += text(ox + 14, oy + 200, 'side xy · +x→ +y↑', {
+                out += drawPlacement(p, placement, COLORS.yellow, {
+                    swing: true, frameLabels: false, exitFrame: false,
+                });
+                out += text(ox + 14, oy + 218, 'side xy · +x→ +y↑', {
                     size: 10, fill: COLORS.muted, weight: '400',
                 });
                 return out;
@@ -454,18 +464,20 @@ const genSolidVsSwing = () => {
             subtitle: '1 solid + 3 corner swings',
             build: (ox, oy) => {
                 const placement = computePlacement('outer', START_STATE);
-                const p = sideView(ox + 40, oy + 56, 36, 1.5);
-                let out = '';
+                const p = sideView(ox + 44, oy + 72, 32, 1.5);
+                let out = axisKey(ox, oy);
                 for (let x = 0; x <= 1; x++) {
                     for (let y = -1; y <= 1; y++) {
                         const pt = p.center(v(x, y, 0));
-                        out += `<rect x="${r(pt.x - p.half)}" y="${r(pt.y - p.half)}" width="36" height="36" ` +
+                        out += `<rect x="${r(pt.x - p.half)}" y="${r(pt.y - p.half)}" width="32" height="32" ` +
                             `fill="none" stroke="${COLORS.grid}"/>`;
                     }
                 }
-                out += drawPlacement(p, placement, COLORS.red, { swing: true });
-                out += text(ox + 14, oy + 200, 'side xy · swings from computePlacement', {
-                    size: 10, fill: COLORS.swingStroke, weight: '600',
+                out += drawPlacement(p, placement, COLORS.red, {
+                    swing: true, frameLabels: false, exitFrame: false,
+                });
+                out += text(ox + 14, oy + 218, 'side xy · swings from computePlacement', {
+                    size: 10, fill: COLORS.muted, weight: '400',
                 });
                 return out;
             },
@@ -474,13 +486,23 @@ const genSolidVsSwing = () => {
             title: 'Shared swing slot',
             subtitle: 'Two rails, one clearance cell',
             build: (ox, oy) => {
-                // Rule schematic (not a placement replay): facing rails both claim
-                // the middle cell as swing — the §4 permission before the photo.
-                const p = topDown(ox + 40, oy + 56, 44);
+                // Rule schematic: facing rails both claim the middle swing cell.
+                // Labels sit above the row; arrows run below them so nothing crosses text.
+                const p = topDown(ox + 40, oy + 88, 44);
                 let out = '';
                 const left = v(0, 0, 0);
                 const swing = v(1, 0, 0);
                 const right = v(2, 0, 0);
+                const lc = p.center(left), rc = p.center(right), sc = p.center(swing);
+                out += text(lc.x, oy + 78, 'rail', {
+                    size: 11, fill: COLORS.blue, weight: '700', anchor: 'middle',
+                });
+                out += text(sc.x, oy + 78, 'swing', {
+                    size: 11, fill: COLORS.swingStroke, weight: '700', anchor: 'middle',
+                });
+                out += text(rc.x, oy + 78, 'rail', {
+                    size: 11, fill: COLORS.green, weight: '700', anchor: 'middle',
+                });
                 for (const c of [left, swing, right]) {
                     const pt = p.center(c);
                     out += `<rect x="${r(pt.x - p.half)}" y="${r(pt.y - p.half)}" width="44" height="44" ` +
@@ -489,20 +511,10 @@ const genSolidVsSwing = () => {
                 out += cellRect(p, left, COLORS.blue, COLORS.solidStroke);
                 out += cellRect(p, right, COLORS.green, COLORS.solidStroke);
                 out += cellRect(p, swing, COLORS.swing, COLORS.swingStroke, true);
-                const lc = p.center(left), rc = p.center(right), sc = p.center(swing);
-                out += text(lc.x, lc.y + 4, 'rail', {
-                    size: 10, fill: '#fff', weight: '700', anchor: 'middle',
-                });
-                out += text(rc.x, rc.y + 4, 'rail', {
-                    size: 10, fill: '#fff', weight: '700', anchor: 'middle',
-                });
-                out += text(sc.x, sc.y + 4, 'swing', {
-                    size: 10, fill: COLORS.swingStroke, weight: '700', anchor: 'middle',
-                });
-                // Opposing up normals into the shared cell (schematic).
-                out += arrow(lc.x + 10, lc.y, sc.x - 8, sc.y, COLORS.up);
-                out += arrow(rc.x - 10, rc.y, sc.x + 8, sc.y, COLORS.up);
-                out += text(ox + 14, oy + 200, 'rule schematic — see photo below', {
+                // Opposing up normals into the shared cell — below the label row.
+                out += arrow(lc.x + 12, lc.y, sc.x - 10, sc.y, COLORS.up);
+                out += arrow(rc.x - 12, rc.y, sc.x + 10, sc.y, COLORS.up);
+                out += text(ox + 14, oy + 218, 'rule schematic — see photo below', {
                     size: 10, fill: COLORS.muted, weight: '400',
                 });
                 return out;

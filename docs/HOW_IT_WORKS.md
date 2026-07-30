@@ -69,6 +69,11 @@ interface TrackState {
 }
 ```
 
+![Same cell, three frames](images/track-state-frame.svg)
+
+*Same cell and heading, three frames. The blue face is the rail; `dir` is travel, `up` is the
+rail-face normal toward the train.*
+
 `dir` has 6 possible values (±x, ±y, ±z) and `up` has to be perpendicular to it, which
 leaves 4 choices, so each cell has 24 orientations. That matches the rotation group of the
 cube (the chiral octahedral group, isomorphic to S₄). A `(dir, up)` pair pins down a full
@@ -80,7 +85,7 @@ One practical note that saved me a lot of debugging. All the vector math is exac
 arithmetic: cross products and negations of axis vectors, with no floats, no normalization
 and no epsilon comparisons. The one wrinkle is that `-1 * 0` is `-0` in IEEE 754, and `-0`
 fails a structural equality check against `0`, so the `Vec3` constructor normalizes `-0`
-back to `0` (`src/core/vec.ts`). If you build something like this, you will hit that.
+back to `0` (`src/core/vec.ts`).
 
 ## 3. Pieces as rigid motions
 
@@ -103,6 +108,12 @@ Route 1 runs straight along its long axis (the motion in the table); route 2 cro
 perpendicular through its far cell, so a loop that uses a cross passes over it twice, once
 each way. Those numbers are printed on the real part, and the code and the rest of this
 document use the same names.
+
+![Piece rigid motions](images/piece-motions.svg)
+
+*Footprints and exit frames from `computePlacement`, entered at the start state. Top-down
+for pieces that stay in the rail plane; side view for inner and outer. ⊙ means `up` points
+out of the page.*
 
 Two consequences of that table shape the solver.
 
@@ -140,6 +151,11 @@ Two swing cells may overlap each other, though, and that permission does more wo
 looks like. It lets two rails face each other across a single empty cell, each claiming that
 cell as clearance. The manual's slotted frame below is impossible to model without it —
 something I only got after staring at the printed manual.
+
+![Solid vs swing cells](images/solid-vs-swing.svg)
+
+*Left and middle: footprints from `computePlacement`. Right: the shareable-swing rule that
+makes the slotted frame legal.*
 
 ![Manual frame example](images/manual-frame.png)
 
@@ -261,6 +277,11 @@ Every orientation falls into one of five rows:
 | 2 | 10 | facing straight backwards, for instance |
 | 3 | 8 | heading home but riding a side wall |
 | 4 | 1 | heading home but hanging from the ceiling |
+
+![Orientation debt extremes](images/orientation-debt.svg)
+
+*Three rows from that table, checked against `orientationLowerBound`. Cost 4 is unique:
+heading home while hanging from the ceiling.*
 
 That last row is the odd one. `dir` exactly right with `up` exactly inverted is the single
 hardest orientation in the game, because the move it wants is a roll about the direction of
@@ -560,4 +581,5 @@ view of 50 saved tracks.
 
 *Found an error, or solved the cross-piece problem? Open an issue. The whole model is about
 500 lines of dependency-free TypeScript in [`src/core/`](../src/core), and it's a fun
-codebase to poke at.*
+codebase to poke at. Schematic figures in this doc regenerate from the piece model via
+[`scripts/docs/gen-how-it-works-figures.ts`](../scripts/docs/gen-how-it-works-figures.ts).*

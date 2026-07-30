@@ -177,86 +177,94 @@ const legendDot = (x: number, y: number, fill: string, stroke: string, label: st
     `stroke="${stroke}" stroke-width="1.2"${dash ? ` stroke-dasharray="3 2"` : ''}/>` +
     text(x + 18, y + 4, label, { size: 11, fill: COLORS.muted, weight: '400' });
 
+/**
+ * Isometric cube sketch. Convention (matches the drawn offsets):
+ *   +x → right along the front face
+ *   +y → up the page
+ *   +z → depth, down-right (toward the back face)
+ * So: front = −z face, back = +z face, right = +x face, top = +y face.
+ */
+const isoAxisScreen = (d: Vec3, len: number) => ({
+    x: d.x * len + d.z * len * 0.55,
+    y: -d.y * len + d.z * len * 0.48,
+});
+
+const drawIsoCube = (cx: number, cy: number, state: TrackState, size = 28) => {
+    const s = size;
+    const dzx = 18 * (size / 28), dzy = 16 * (size / 28);
+    const pts = {
+        // front (−z): f{x}{y}
+        f00: [cx - s, cy + s * 0.3],
+        f10: [cx + s, cy + s * 0.3],
+        f01: [cx - s, cy - s * 0.9],
+        f11: [cx + s, cy - s * 0.9],
+        // back (+z)
+        b00: [cx - s + dzx, cy + s * 0.3 + dzy],
+        b10: [cx + s + dzx, cy + s * 0.3 + dzy],
+        b01: [cx - s + dzx, cy - s * 0.9 + dzy],
+        b11: [cx + s + dzx, cy - s * 0.9 + dzy],
+    } as const;
+    const poly = (keys: (keyof typeof pts)[], fill: string, opacity = 1) =>
+        `<polygon points="${keys.map((k) => pts[k].join(',')).join(' ')}" ` +
+        `fill="${fill}" fill-opacity="${opacity}" stroke="${COLORS.solidStroke}" stroke-width="1.2"/>`;
+
+    // Draw order: far faces first. Bottom (−y), back (+z), then front (−z), right (+x).
+    let out = poly(['f00', 'f10', 'b10', 'b00'], '#e5e7eb', 0.9); // −y
+    out += poly(['b00', 'b10', 'b11', 'b01'], '#dbe3ee', 0.85); // +z (back)
+    out += poly(['f00', 'f10', 'f11', 'f01'], '#f3f4f6', 0.95); // −z (front)
+    out += poly(['f10', 'b10', 'b11', 'f11'], '#d1d5db', 0.9); // +x
+
+    // Rail face = face whose outward normal is `up`.
+    const rail = '#93c5fd';
+    if (eq(state.up, v(0, 1, 0))) out += poly(['f01', 'f11', 'b11', 'b01'], rail, 0.9); // +y
+    else if (eq(state.up, v(0, -1, 0))) out += poly(['f00', 'f10', 'b10', 'b00'], rail, 0.95); // −y
+    else if (eq(state.up, v(0, 0, 1))) out += poly(['b00', 'b10', 'b11', 'b01'], rail, 0.95); // +z
+    else if (eq(state.up, v(0, 0, -1))) out += poly(['f00', 'f10', 'f11', 'f01'], rail, 0.95); // −z
+    else if (eq(state.up, v(1, 0, 0))) out += poly(['f10', 'b10', 'b11', 'f11'], rail, 0.95); // +x
+    else if (eq(state.up, v(-1, 0, 0))) out += poly(['f00', 'b00', 'b01', 'f01'], rail, 0.95); // −x
+
+    const origin = [cx + 4, cy + 2] as const;
+    const al = size * 1.15;
+    const d = isoAxisScreen(state.dir, al);
+    const u = isoAxisScreen(state.up, al);
+    out += arrow(origin[0], origin[1], origin[0] + d.x, origin[1] + d.y, COLORS.dir, 'dir');
+    out += arrow(origin[0], origin[1], origin[0] + u.x, origin[1] + u.y, COLORS.up, 'up');
+    return out;
+};
+
 // ---------------------------------------------------------------------------
 // Figure 1 — TrackState as a frame (§2)
 // ---------------------------------------------------------------------------
 
 const genTrackStateFrame = () => {
-    const cellPx = 72;
     const panelW = 200;
-    const panelH = 210;
+    const panelH = 220;
     const cases: { title: string; state: TrackState; note: string }[] = [
         {
             title: 'Floor',
             state: { cell: v(0, 0, 0), dir: v(1, 0, 0), up: v(0, 1, 0) },
-            note: 'rail on top',
+            note: 'rail on +y face',
         },
         {
+            // Use −z so the rail face is the visible front of this isometric sketch
+            // (+z is the hidden back face under the same camera).
             title: 'Wall',
-            state: { cell: v(0, 0, 0), dir: v(1, 0, 0), up: v(0, 0, 1) },
-            note: 'rail on +z face',
+            state: { cell: v(0, 0, 0), dir: v(1, 0, 0), up: v(0, 0, -1) },
+            note: 'rail on −z face (toward camera)',
         },
         {
             title: 'Ceiling',
             state: { cell: v(0, 0, 0), dir: v(1, 0, 0), up: v(0, -1, 0) },
-            note: 'rail underneath',
+            note: 'rail on −y face',
         },
     ];
-
-    // Isometric-ish cube: show faces depending on up.
-    const drawCube = (cx: number, cy: number, state: TrackState) => {
-        const s = 28;
-        // Simple 2.5D cube outline
-        const pts = {
-            f00: [cx - s, cy + s * 0.3],
-            f10: [cx + s, cy + s * 0.3],
-            f01: [cx - s, cy - s * 0.9],
-            f11: [cx + s, cy - s * 0.9],
-            // depth toward +z visually down-right
-            b00: [cx - s + 18, cy + s * 0.3 + 16],
-            b10: [cx + s + 18, cy + s * 0.3 + 16],
-            b01: [cx - s + 18, cy - s * 0.9 + 16],
-            b11: [cx + s + 18, cy - s * 0.9 + 16],
-        } as const;
-        const poly = (keys: (keyof typeof pts)[], fill: string, opacity = 1) =>
-            `<polygon points="${keys.map((k) => pts[k].join(',')).join(' ')}" ` +
-            `fill="${fill}" fill-opacity="${opacity}" stroke="${COLORS.solidStroke}" stroke-width="1.2"/>`;
-
-        // Which face is the rail? Highlight by up.
-        let out = poly(['f00', 'f10', 'b10', 'b00'], '#e5e7eb', 0.9); // bottom-ish
-        out += poly(['f00', 'f10', 'f11', 'f01'], '#f3f4f6', 0.95); // front
-        out += poly(['f10', 'b10', 'b11', 'f11'], '#d1d5db', 0.9); // right
-
-        // Rail face tint
-        const railFill = '#93c5fd';
-        if (eq(state.up, v(0, 1, 0))) {
-            out += poly(['f01', 'f11', 'b11', 'b01'], railFill, 0.85); // top
-        } else if (eq(state.up, v(0, -1, 0))) {
-            out += poly(['f00', 'f10', 'b10', 'b00'], railFill, 0.9); // bottom
-        } else if (eq(state.up, v(0, 0, 1))) {
-            out += poly(['f10', 'b10', 'b11', 'f11'], railFill, 0.9); // +z ≈ right in this sketch
-        }
-
-        // Arrows from cube center
-        const origin = [cx + 6, cy + 2] as const;
-        // dir along +x ≈ right on front face
-        out += arrow(origin[0], origin[1], origin[0] + 34, origin[1], COLORS.dir, 'dir');
-        if (eq(state.up, v(0, 1, 0))) {
-            out += arrow(origin[0], origin[1], origin[0], origin[1] - 34, COLORS.up, 'up');
-        } else if (eq(state.up, v(0, -1, 0))) {
-            out += arrow(origin[0], origin[1], origin[0], origin[1] + 34, COLORS.up, 'up');
-        } else if (eq(state.up, v(0, 0, 1))) {
-            out += arrow(origin[0], origin[1], origin[0] + 22, origin[1] + 20, COLORS.up, 'up');
-        }
-        return out;
-    };
 
     let body = text(24, 28, 'Same cell, same heading — three different frames', {
         size: 15, weight: '600',
     });
-    body += text(24, 48, 'dir is travel; up is the rail-face normal (toward the train). right = dir × up.', {
-        size: 12, fill: COLORS.muted, weight: '400',
-    });
+    body += text(24, 48,
+        'dir = travel; up = rail normal toward the train. Axes: +x →, +y ↑, +z ↘ (away from camera).',
+        { size: 12, fill: COLORS.muted, weight: '400' });
 
     cases.forEach((c, i) => {
         const ox = 24 + i * panelW;
@@ -265,9 +273,9 @@ const genTrackStateFrame = () => {
             `rx="10" fill="#fff" stroke="${COLORS.grid}" stroke-width="1"/>`;
         body += text(ox + 14, oy + 24, c.title, { size: 14, weight: '600' });
         body += text(ox + 14, oy + 42, c.note, { size: 11, fill: COLORS.muted, weight: '400' });
-        body += drawCube(ox + (panelW - 16) / 2 - 4, oy + 115, c.state);
+        body += drawIsoCube(ox + (panelW - 16) / 2 - 4, oy + 118, c.state);
         body += text(ox + 14, oy + panelH - 14,
-            `up = (${c.state.up.x}, ${c.state.up.y}, ${c.state.up.z})`, {
+            `dir=(1,0,0)  up=(${c.state.up.x},${c.state.up.y},${c.state.up.z})`, {
                 size: 11, fill: COLORS.muted, weight: '400',
             });
     });
@@ -314,9 +322,10 @@ const genPieceMotions = () => {
         body += `<rect x="${ox}" y="${oy}" width="${pw}" height="${panelH}" ` +
             `rx="10" fill="#fff" stroke="${COLORS.grid}"/>`;
         body += text(ox + 12, oy + 22, meta.label, { size: 13, weight: '600' });
-        body += text(ox + 12, oy + 38, meta.view === 'top' ? 'top-down (xz)' : 'side (xy)', {
-            size: 10, fill: COLORS.muted, weight: '400',
-        });
+        body += text(ox + 12, oy + 38,
+            meta.view === 'top' ? 'top-down xz · +x→ +z↓' : 'side xy · +x→ +y↑', {
+                size: 10, fill: COLORS.muted, weight: '400',
+            });
 
         const all = [...placement.cells, placement.exit.cell];
         const xs = all.map((c) => c.x);
@@ -436,10 +445,10 @@ const genSolidVsSwing = () => {
         },
         {
             title: 'Curve L',
-            subtitle: '4 solids + 4 swings above',
+            subtitle: '4 solids; swings at +up (⊙)',
             build: (ox, oy) => {
                 const placement = computePlacement('curveLeft', START_STATE);
-                // Top-down solids; swing is +up (out of page).
+                // Top-down (+x→, +z↓); swing is +up out of page.
                 const p = topDown(ox + 36, oy + 44, 36);
                 let out = '';
                 for (let x = 0; x <= 1; x++) {
@@ -452,7 +461,7 @@ const genSolidVsSwing = () => {
                 for (const c of placement.cells) {
                     out += cellRect(p, c, COLORS.blue, COLORS.solidStroke);
                 }
-                out += text(ox + 14, oy + 188, 'swing = same 4 cells, +up (out of page)', {
+                out += text(ox + 14, oy + 188, 'top-down +x→ +z↓ · swing = +y (⊙)', {
                     size: 10, fill: COLORS.swingStroke, weight: '600',
                 });
                 const e = p.center(placement.entry.cell);
@@ -559,12 +568,12 @@ const genOrientationDebt = () => {
     }
 
     const panelW = 250;
-    const panelH = 228;
+    const panelH = 242;
     let body = text(20, 26, 'Orientation debt: fewest pieces to realign (dir, up)', {
         size: 15, weight: '600',
     });
     body += text(20, 46,
-        'Costs from the BFS word metric on the cube rotation group (orientationLowerBound).',
+        'From orientationLowerBound. Sketch axes: +x →, +y ↑, +z ↘. Cost 1 uses curveLeft’s exit frame.',
         { size: 11, fill: COLORS.muted, weight: '400' });
 
     cases.forEach((c, i) => {
@@ -580,52 +589,12 @@ const genOrientationDebt = () => {
             });
         });
 
-        // Cube + arrows (reuse isometric sketch)
-        const cx = ox + panelW / 2 - 4;
-        const cy = oy + 120;
-        const s = 30;
-        const pts = {
-            f00: [cx - s, cy + s * 0.3],
-            f10: [cx + s, cy + s * 0.3],
-            f01: [cx - s, cy - s * 0.9],
-            f11: [cx + s, cy - s * 0.9],
-            b00: [cx - s + 18, cy + s * 0.3 + 16],
-            b10: [cx + s + 18, cy + s * 0.3 + 16],
-            b01: [cx - s + 18, cy - s * 0.9 + 16],
-            b11: [cx + s + 18, cy - s * 0.9 + 16],
-        } as const;
-        const poly = (keys: (keyof typeof pts)[], fill: string, opacity = 1) =>
-            `<polygon points="${keys.map((k) => pts[k].join(',')).join(' ')}" ` +
-            `fill="${fill}" fill-opacity="${opacity}" stroke="${COLORS.solidStroke}" stroke-width="1.2"/>`;
-        body += poly(['f00', 'f10', 'b10', 'b00'], '#e5e7eb', 0.9);
-        body += poly(['f00', 'f10', 'f11', 'f01'], '#f3f4f6', 0.95);
-        body += poly(['f10', 'b10', 'b11', 'f11'], '#d1d5db', 0.9);
-        if (eq(c.state.up, v(0, 1, 0))) {
-            body += poly(['f01', 'f11', 'b11', 'b01'], '#93c5fd', 0.85);
-        } else if (eq(c.state.up, v(0, -1, 0))) {
-            body += poly(['f00', 'f10', 'b10', 'b00'], '#93c5fd', 0.9);
-        } else {
-            // yawed: rail still on top for curveLeft exit (up unchanged)
-            body += poly(['f01', 'f11', 'b11', 'b01'], '#93c5fd', 0.85);
-        }
-
-        const origin = [cx + 6, cy + 2] as const;
-        // dir: for start +X right; for curveLeft exit dir = -Z → toward viewer-ish (down-left in our iso)
-        if (eq(c.state.dir, v(1, 0, 0))) {
-            body += arrow(origin[0], origin[1], origin[0] + 36, origin[1], COLORS.dir, 'dir');
-        } else if (eq(c.state.dir, v(0, 0, -1))) {
-            body += arrow(origin[0], origin[1], origin[0] - 10, origin[1] + 28, COLORS.dir, 'dir');
-        } else if (eq(c.state.dir, v(0, 0, 1))) {
-            body += arrow(origin[0], origin[1], origin[0] + 22, origin[1] + 20, COLORS.dir, 'dir');
-        }
-
-        if (eq(c.state.up, v(0, 1, 0))) {
-            body += arrow(origin[0], origin[1], origin[0], origin[1] - 36, COLORS.up, 'up');
-        } else if (eq(c.state.up, v(0, -1, 0))) {
-            body += arrow(origin[0], origin[1], origin[0], origin[1] + 36, COLORS.up, 'up');
-        }
-
-        body += text(ox + 14, oy + panelH - 16, `orientationLowerBound = ${cost}`, {
+        body += drawIsoCube(ox + panelW / 2 - 4, oy + 128, c.state, 30);
+        body += text(ox + 14, oy + panelH - 28,
+            `dir=(${c.state.dir.x},${c.state.dir.y},${c.state.dir.z})  up=(${c.state.up.x},${c.state.up.y},${c.state.up.z})`, {
+                size: 11, fill: COLORS.muted, weight: '400',
+            });
+        body += text(ox + 14, oy + panelH - 12, `orientationLowerBound = ${cost}`, {
             size: 12, fill: cost === 4 ? COLORS.red : COLORS.ink, weight: '700',
         });
     });
@@ -638,6 +607,30 @@ const genOrientationDebt = () => {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+
+// Sanity checks against the live model — fail loud if a figure would lie.
+{
+    const cl = computePlacement('curveLeft', START_STATE);
+    const expectCells = (t: PieceType, n: number, swing: number) => {
+        const p = computePlacement(t, START_STATE);
+        if (p.cells.length !== n || p.swing.length !== swing) {
+            throw new Error(`${t}: expected ${n} cells / ${swing} swing, got ${p.cells.length}/${p.swing.length}`);
+        }
+    };
+    expectCells('straight', 1, 1);
+    expectCells('curveLeft', 4, 4);
+    expectCells('inner', 4, 0);
+    expectCells('outer', 1, 3);
+    expectCells('cross', 2, 2);
+    if (orientationLowerBound(START_STATE.dir, START_STATE.up) !== 0) throw new Error('start cost');
+    if (orientationLowerBound(cl.exit.dir, cl.exit.up) !== 1) throw new Error('curveLeft exit cost');
+    if (orientationLowerBound(v(1, 0, 0), v(0, -1, 0)) !== 4) throw new Error('ceiling cost');
+    // Iso mapping: +z screen delta must be down-right, −z up-left.
+    const plusZ = isoAxisScreen(v(0, 0, 1), 10);
+    const minusZ = isoAxisScreen(v(0, 0, -1), 10);
+    if (!(plusZ.x > 0 && plusZ.y > 0)) throw new Error('+z should project down-right');
+    if (!(minusZ.x < 0 && minusZ.y < 0)) throw new Error('−z should project up-left');
+}
 
 mkdirSync(OUT, { recursive: true });
 

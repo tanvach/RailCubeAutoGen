@@ -18,4 +18,6 @@ Writes into `docs/images/`:
 | `solid-vs-swing.svg` | §4 | solids/swing from `computePlacement` + shareable-swing rule |
 | `orientation-debt.svg` | §6.1 | `orientationLowerBound` (asserts costs 0 / 1 / 4) |
 
-Re-run after changing piece geometry or the orientation metric.
+Re-run after changing piece geometry or the orientation metric. The script asserts
+cell/swing counts, the 0/1/4 orientation costs, and that isometric +z/−z project
+the right way before writing files.

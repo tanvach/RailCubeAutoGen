@@ -72,7 +72,8 @@ interface TrackState {
 ![Same cell, three frames](images/track-state-frame.svg)
 
 *Same cell and heading, three frames. The blue face is the rail; `dir` is travel, `up` is the
-rail-face normal toward the train.*
+rail-face normal toward the train. Sketch axes: +x right, +y up, +z into depth away from the
+camera (down-right). The wall panel uses the −z face so the rail is the visible front.*
 
 `dir` has 6 possible values (±x, ±y, ±z) and `up` has to be perpendicular to it, which
 leaves 4 choices, so each cell has 24 orientations. That matches the rotation group of the
@@ -112,8 +113,8 @@ document use the same names.
 ![Piece rigid motions](images/piece-motions.svg)
 
 *Footprints and exit frames from `computePlacement`, entered at the start state. Top-down
-for pieces that stay in the rail plane; side view for inner and outer. ⊙ means `up` points
-out of the page.*
+panels use +x right and +z down the page; side panels use +x right and +y up. ⊙ means `up`
+points out of the page (+y in the top-down views).*
 
 Two consequences of that table shape the solver.
 

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { generateTrack, GeneratedTrack } from './generator';
+import { generateTrack, orientationLowerBound, GeneratedTrack } from './generator';
 import { STARTER_SET, DELUXE_SET, Inventory, statesEqual, START_STATE, computePlacement } from './pieces';
 import { OccupancyGrid } from './grid';
+import { Vec3, v, cross, neg } from './vec';
 
 /** Re-validate a generated track from scratch: placement legality and closure. */
 const validate = (track: GeneratedTrack) => {
@@ -44,6 +45,57 @@ const usedWithin = (track: GeneratedTrack, inv: Inventory) => {
         expect(track.used[k], `${k} within inventory`).toBeLessThanOrEqual(inv[k]);
     }
 };
+
+describe('orientation lower bound', () => {
+    const AXES: Vec3[] = [v(1, 0, 0), v(-1, 0, 0), v(0, 1, 0), v(0, -1, 0), v(0, 0, 1), v(0, 0, -1)];
+    const dot = (a: Vec3, b: Vec3) => a.x * b.x + a.y * b.y + a.z * b.z;
+    const ALL_ORIENTATIONS = AXES.flatMap((dir) =>
+        AXES.filter((up) => dot(dir, up) === 0).map((up) => ({ dir, up })));
+
+    it('covers all 24 orientations', () => {
+        expect(ALL_ORIENTATIONS).toHaveLength(24);
+    });
+
+    it('is zero exactly at the start frame', () => {
+        for (const { dir, up } of ALL_ORIENTATIONS) {
+            const atHome = statesEqual({ cell: v(0, 0, 0), dir, up }, START_STATE);
+            expect(orientationLowerBound(dir, up) === 0).toBe(atHome);
+        }
+    });
+
+    it('charges 1, not 2, when a single piece can realign both axes', () => {
+        // An outer curve entered with dir=+Y, up=-X exits with dir=+X, up=+Y —
+        // the start frame. The previous hand-set bound charged 2 here and could
+        // prune a legal closing move.
+        const entry = { cell: v(-1, 0, 0), dir: v(0, 1, 0), up: v(-1, 0, 0) };
+        expect(statesEqual(computePlacement('outer', entry).exit, START_STATE)).toBe(true);
+        expect(orientationLowerBound(entry.dir, entry.up)).toBe(1);
+    });
+
+    it('matches the known distance distribution (diameter 4)', () => {
+        const counts = [0, 0, 0, 0, 0];
+        for (const { dir, up } of ALL_ORIENTATIONS) counts[orientationLowerBound(dir, up)]++;
+        expect(counts).toEqual([1, 4, 10, 8, 1]);
+        // The unique hardest case: heading home but hanging from the ceiling.
+        expect(orientationLowerBound(v(1, 0, 0), v(0, -1, 0))).toBe(4);
+    });
+
+    it('is an exact word metric: every piece changes it by at most 1', () => {
+        for (const { dir, up } of ALL_ORIENTATIONS) {
+            const d = orientationLowerBound(dir, up);
+            const moves = [
+                { dir: cross(up, dir), up },  // curveLeft
+                { dir: cross(dir, up), up },  // curveRight
+                { dir: up, up: neg(dir) },    // inner
+                { dir: neg(up), up: dir },    // outer
+            ];
+            const after = moves.map((m) => orientationLowerBound(m.dir, m.up));
+            for (const a of after) expect(Math.abs(a - d)).toBeLessThanOrEqual(1);
+            // Off home, some piece must make progress (BFS parents exist).
+            if (d > 0) expect(Math.min(...after)).toBe(d - 1);
+        }
+    });
+});
 
 describe('generator', () => {
     it('generates a valid flat starter-set loop', () => {

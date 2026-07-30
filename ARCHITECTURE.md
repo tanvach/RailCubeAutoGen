@@ -40,10 +40,11 @@ export interface TrackState {
   (not strings) — this is the generator's hottest path.
 - **`generator.ts`** — seeded backtracking (mulberry32) over TrackState space. Weighted
   random candidate order (`elevation` shifts weight to/from inner/outer), Manhattan
-  pruning against the remaining piece budget, a head-home candidate ordering when the
-  budget gets tight, cross route-2 handled as a special "pass through occupied cell" step
-  with a once-per-cross rule. `generateTrack()` retries derived seeds on an **escalating
-  budget schedule** (40×15k → 20×60k → 8×250k → 6×1M nodes): backtracking runtimes are
+  pruning against the remaining piece budget plus an exact orientation lower bound (the
+  word metric over the 24 orientations, BFS-precomputed at module load), a head-home
+  candidate ordering when the budget gets tight, cross route-2 handled as a special "pass
+  through occupied cell" step with a once-per-cross rule. `generateTrack()` retries derived
+  seeds on an **escalating budget schedule** (40×15k → 20×60k → 8×250k → 6×1M nodes): backtracking runtimes are
   heavy-tailed, so many cheap seeds beat a few expensive ones. Passing an explicit
   `maxNodes` (tests) keeps the old fixed-budget behavior.
 - **`generator.worker.ts`** — message wrapper so search never blocks the UI. If extreme

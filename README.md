@@ -7,6 +7,12 @@ A client-side web app that procedurally generates **valid, closed 3D track loops
 renders them in Three.js with an animated train, and prints "program note" style assembly
 instructions (the color sequence used by the physical set's programming practice sheets).
 
+Curious how it finds those loops? **[How It Works](docs/HOW_IT_WORKS.md)** is a deep dive
+into the solver — a randomized backtracking search over a 3D grid of oriented frames, and
+the five heuristics (admissible pruning, weighted ordering, a homing phase, heavy-tail
+restarts, graceful relaxation) that make it feel instant — plus the rendering pipeline that
+turns integer cells into a lit, animated scene.
+
 ![Generated deluxe course](docs/images/generated-deluxe.png)
 
 ## Quickstart
@@ -68,11 +74,13 @@ Placement rules enforced by the model:
 ## Features
 
 - **Generator** — seeded backtracking search (runs in a Web Worker) with weighted-random
-  piece selection, an elevation dial (flat ↔ vertical), Manhattan-distance pruning, and a
-  head-home bias when the piece budget runs low. Deterministic per seed. Restarts follow an
+  piece selection, an elevation dial (flat ↔ vertical), Manhattan-distance and exact
+  orientation-distance pruning, and a head-home bias when the piece budget runs low.
+  Deterministic per seed. Restarts follow an
   escalating budget schedule (many cheap seeds first — backtracking runtimes are heavy-
   tailed), and if extreme settings can't close, the worker relaxes them slightly once
-  instead of failing.
+  instead of failing. The full story, with the math behind each heuristic, is in
+  [How It Works](docs/HOW_IT_WORKS.md).
 - **3D viewport** — faithful piece meshes (near-flush steel rail strips, two-tone curves
   with grooves on both faces, concave/convex wedge profiles, connector knobs), minimal
   support pillars (only under long floating runs), OrbitControls, and an animated train that
@@ -138,7 +146,9 @@ src/
 scripts/
   screenshot.mjs   Headless visual regression/screenshot tool (Playwright)
 references/        Photos of the physical pieces and the printed Japanese manual
-docs/images/       Rendered verification screenshots
+docs/
+  HOW_IT_WORKS.md  Deep dive: the solver, its heuristics, and the rendering pipeline
+  images/          Rendered verification screenshots
 ```
 
 ## Testing
@@ -165,5 +175,6 @@ docs/images/       Rendered verification screenshots
 - Track curvature radius matches the starter/deluxe pieces; the "Rail Cube Action" add-on
   parts (slopes, spinners) from the manual's contents page are not modeled.
 
-See [SPEC.md](SPEC.md) for the original brief and [ARCHITECTURE.md](ARCHITECTURE.md) for
-design decisions.
+See [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) for a deep dive into the solver and
+renderer, [ARCHITECTURE.md](ARCHITECTURE.md) for design decisions, and [SPEC.md](SPEC.md)
+for the original brief.

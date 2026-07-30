@@ -1,4 +1,4 @@
-import { manhattan, eq } from './vec';
+import { Vec3, manhattan, cross, neg } from './vec';
 import {
     PieceType, Inventory, InventoryKey, TrackState, PiecePlacement, Step,
     START_STATE, computePlacement, statesEqual, canCrossPass, inventoryKeyOf, usedInventory,
@@ -42,6 +42,54 @@ const CANDIDATES: PieceType[] = ['straight', 'curveLeft', 'curveRight', 'inner',
 
 /** Max manhattan displacement of any single piece (curves/inner move 3). */
 const MAX_STEP_DIST = 3;
+
+// ---------------------------------------------------------------------------
+// Exact orientation lower bound.
+//
+// Only curves (90° yaw about `up`) and inner/outer curves (opposite 90°
+// pitches about `right`) change orientation, one step per piece. So any loop
+// still needs at least as many pieces as the distance from the current
+// (dir, up) to the start frame in the cube's 24-element rotation group under
+// those four generators (the word metric on its Cayley graph). The generator
+// set is closed under inverses, so one BFS out of the start frame computes
+// the whole table. Replaces a hand-set bound that was slightly inadmissible:
+// it charged 2 pieces whenever `up` was off, but a single outer curve can fix
+// dir and up at once.
+// ---------------------------------------------------------------------------
+
+const orientKey = (dir: Vec3, up: Vec3): number =>
+    (dir.x + 1) + (dir.y + 1) * 3 + (dir.z + 1) * 9 +
+    ((up.x + 1) + (up.y + 1) * 3 + (up.z + 1) * 9) * 27;
+
+const ORIENT_DIST: ReadonlyMap<number, number> = (() => {
+    const dist = new Map<number, number>();
+    let frontier = [{ dir: START_STATE.dir, up: START_STATE.up }];
+    dist.set(orientKey(START_STATE.dir, START_STATE.up), 0);
+    for (let d = 1; frontier.length > 0; d++) {
+        const next: typeof frontier = [];
+        for (const o of frontier) {
+            const moves = [
+                { dir: cross(o.up, o.dir), up: o.up }, // curveLeft
+                { dir: cross(o.dir, o.up), up: o.up }, // curveRight
+                { dir: o.up, up: neg(o.dir) },         // inner
+                { dir: neg(o.up), up: o.dir },         // outer
+            ];
+            for (const m of moves) {
+                const k = orientKey(m.dir, m.up);
+                if (!dist.has(k)) {
+                    dist.set(k, d);
+                    next.push(m);
+                }
+            }
+        }
+        frontier = next;
+    }
+    return dist;
+})();
+
+/** Fewest pieces that could realign (dir, up) with the start frame. */
+export const orientationLowerBound = (dir: Vec3, up: Vec3): number =>
+    ORIENT_DIST.get(orientKey(dir, up))!;
 
 export class Generator {
     private inventory: Inventory;
@@ -102,10 +150,8 @@ export class Generator {
         const remaining = this.options.maxPieces - pieceCount;
         if (remaining <= 0) return false;
         const dist = manhattan(state.cell, START_STATE.cell);
-        // Orientation realignment needs extra pieces beyond raw distance.
-        const dirOff = eq(state.dir, START_STATE.dir) ? 0 : 1;
-        const upOff = eq(state.up, START_STATE.up) ? 0 : 2;
-        if (dist > remaining * MAX_STEP_DIST || remaining < Math.max(dirOff, upOff)) return false;
+        if (dist > remaining * MAX_STEP_DIST) return false;
+        if (orientationLowerBound(state.dir, state.up) > remaining) return false;
 
         // Weighted-random candidate order. When the piece budget gets tight
         // relative to the distance home, switch to homing: prefer pieces whose

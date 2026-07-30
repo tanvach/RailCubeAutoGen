@@ -34,20 +34,24 @@ squares that a child reads left to right and turns into a physical build.
 ![Generated deluxe course](images/generated-deluxe.png)
 
 This project asks whether a computer can invent new courses from the pieces in the box.
-Concretely the app has to do three things:
+Every course begins and ends at the white start cube, so concretely the app has to do three
+things:
 
-1. Find a sequence of pieces that leaves the white powered cube and comes back to it
-   exactly, meaning the same cell, the same direction of travel and the same orientation,
-   with no piece overlapping another or blocking the space the train needs.
-2. Stay inside the physical inventory. You only own 8 curves.
+1. Find a sequence of pieces that leaves the white cube and comes back to it exactly,
+   meaning the same cell, the same direction of travel and the same orientation, with no
+   piece overlapping another or blocking the space the train needs.
+2. Stay inside a real box of pieces. The starter set holds 15 straights, 8 curves, 4 inner
+   curves and 4 outer curves; the deluxe set roughly doubles those and adds 2 crossings.
+   Eight curves is not many for a shape that has to turn all the way back on itself, so the
+   box, not the geometry, is usually what runs out first.
 3. Draw the result well enough that a child, or more realistically their parent, can build
    it from the picture and the color sequence.
 
-That sounds like path-finding. It is closer to a self-avoiding polygon search in a state
-space where the moves don't commute, which is a hard combinatorial problem. Most of what
-follows is about the handful of heuristics that make it feel instant anyway. Everything runs
-in the browser: the solver is dependency-free TypeScript in `src/core/` with no DOM and no
-Three.js, and the renderer lives in `src/view/`.
+The first of those sounds like path-finding. It is closer to a self-avoiding polygon search
+in a state space where the moves don't commute, which is a hard combinatorial problem. Most
+of what follows is about the handful of heuristics that make it feel instant anyway.
+Everything runs in the browser: the solver is dependency-free TypeScript in `src/core/` with
+no DOM and no Three.js, and the renderer lives in `src/view/`.
 
 ## 2. What a track state has to remember
 
@@ -96,6 +100,14 @@ catalog is one `switch` statement (`computePlacement` in `src/core/pieces.ts`).
 | Outer curve | red | `-up` | 90° pitch: `dir -> -up`, `up -> dir` | 1 |
 | Cross | purple | `2*dir` | identity | 2 |
 
+The table leans on two things it doesn't spell out. `side` is the direction a flat curve
+turns toward, `up × dir` for a left curve and `dir × up` for a right one; blue and green are
+the same physical part flipped over, which is why both draw from the same pool of curves.
+The cross, meanwhile, is the only piece with two ways through it. Route 1 runs straight
+along its long axis and is the motion listed above; route 2 crosses perpendicular through
+its far cell, so a loop that uses a cross passes over it twice, once each way. Those numbers
+are printed on the real part, and the code and the rest of this document use the same names.
+
 Two consequences of that table shape the entire solver.
 
 The first is that closed loops are words that evaluate to the identity. A track is a
@@ -126,20 +138,25 @@ Legal geometry is not the same as a legal build. `OccupancyGrid` (`src/core/grid
 enforces the physical constraints.
 
 Solid cells never overlap other solids, which is the obvious one. Each piece also declares
-swing cells, the empty space the train sweeps through while traversing it: one cell above a
-straight, the carved region of a curve. A solid may never sit in anyone's swing cell, and no
-swing cell may open inside a solid. Swing cells can be shared between pieces, though, and
-that rule does more work than it appears to. Two rails can face each other across a single
-empty cell, each claiming it as clearance. The manual's slotted-frame example below is
-impossible to model without shareable swing cells, and that insight came straight from
-staring at the printed manual. On top of those, every cell has to stay at `y >= 0`, and a
-cross piece's perpendicular route 2 may be used at most once per loop.
+swing cells, the empty space the train sweeps through while riding it: the cell above a
+straight, the four cells above a flat curve, the corner region outside an outer curve. An
+inner curve declares none, because the space it sweeps is the concave notch inside its own
+body. A solid may never sit in anyone's swing cell, and no swing cell may open inside a
+solid.
+
+Two swing cells may overlap each other, though, and that one permission does more work than
+it looks like it should. It lets two rails face each other across a single empty cell, each
+claiming that cell as its own clearance. The manual's slotted frame below is impossible to
+model without it, which is what staring at the printed manual eventually taught me.
 
 ![Manual frame example](images/manual-frame.png)
 
 *The manual's slotted frame. The train dives through a vertical slot one cell wide with rail
 on both walls, and each wall piece claims the slot as its swing cell. That is legal, because
 swing cells are shareable.*
+
+Two rules round out the set: every cell has to stay at `y >= 0`, the floor, and each cross
+piece may be traversed by route 2 at most once.
 
 The grid itself is two hash maps. The first implementation keyed them with strings like
 `"3,0,-2"`, and profiling showed that building those keys dominated the solver's hot loop,
@@ -196,9 +213,9 @@ given seed and settings. That makes failures reproducible and property tests mea
 One deliberate exclusion: the generator never places cross pieces. A cross only earns its
 place if the loop later re-crosses it through route 2, and a forward search has no way to
 plan a rendezvous with its own future. Placed greedily, crosses behaved like over-wide
-straights and cluttered the assembly program. Traversing a cross that is already on the
-board still works, which is what replayed manual programs do. Section 10 sketches how a
-future search could place them on purpose.
+straights and cluttered the assembly program. The model still handles a cross that is
+already on the board, which is how the transcribed manual courses of section 9 replay
+correctly, and section 10 sketches how a future search could place them on purpose.
 
 ### The recursion in one diagram
 
@@ -222,14 +239,15 @@ flowchart TD
 ## 6. Five heuristics
 
 Plain backtracking is hopeless here. The branching factor is about 5 and useful tracks are
-20 to 60 pieces deep, so the raw tree is astronomically large. Five heuristics bring the
-common case down to tens of milliseconds. Each one is small on its own. They compound.
+20 to 60 pieces deep, so the raw tree is astronomically large. The five measures below bring
+the common case down to tens of milliseconds, and the last one covers the cases that still
+refuse to close. Each is small on its own. They compound.
 
 ### 6.1 Admissible pruning (branch and bound)
 
 At every node the solver asks whether getting home is still possible with the pieces it has
-left. No single piece displaces the state by more than Manhattan distance 3, since curves
-and inner curves move by `1 + 2`, so:
+left. No single piece moves the train more than 3 cells of Manhattan distance, the `1 + 2`
+of a curve or an inner curve being the largest step in the table, so:
 
 ```ts
 if (dist_home > remaining * 3) return false;
@@ -245,9 +263,10 @@ pitches) change orientation, one step per piece, so the fewest pieces that could
 current `(dir, up)` with the start frame is its distance to the identity in the Cayley graph
 of the cube's rotation group under those four generators. This is where the group theory
 from section 3 becomes useful. The group has only 24 elements, so the whole metric is a
-small table, computed by breadth-first search when the module loads.
+small table, computed by breadth-first search when the module loads. Every orientation the
+train can be in falls into one of five rows:
 
-| Distance home | Orientations | Example |
+| Pieces needed to realign | How many orientations | Example |
 | --- | --- | --- |
 | 0 | 1 | the start frame itself |
 | 1 | 4 | one yaw or one pitch away |
@@ -276,10 +295,12 @@ radius `maxPieces * 3` around the origin, so the space is finite even though ℤ
 ### 6.2 Weighted-random candidate ordering
 
 The elevation slider in the UI doesn't filter pieces, it reshapes a probability
-distribution. Each candidate gets a weight, `1.1 - 0.4e` for curves and `0.08 + 2.2e` for
-the vertical inner and outer pieces, and candidates are sorted by `rand() / weight`. Heavier
-pieces tend to be tried first, and since the search is depth-first, tried first means
-committed to first. Style falls out of ordering.
+distribution. Write the slider position as `e`, running from 0 for a flat track to 1 for
+climb-whenever-possible. Each candidate piece then gets a weight: `1.1 - 0.4e` for the flat
+curves, `0.08 + 2.2e` for the vertical inner and outer curves, and a constant 1 for
+straights. Candidates are sorted by `rand() / weight`, smallest first, so heavier pieces
+tend to come early, and since the search is depth-first, tried first means committed to
+first. Style falls out of ordering.
 
 Sorting by `u/w` is a cheap cousin of the Gumbel-max trick. The exact way to sample an
 ordering proportional to weights is to sort by `-ln(u)/w`, an exponential race, or
@@ -295,12 +316,13 @@ hard filter does.
 ### 6.3 The homing phase
 
 Random walks are bad at coming home. A symmetric walk wanders off and the piece budget runs
-dry in mid-air. So the solver watches its slack, `remaining * 3 - dist_home`, and once slack
-drops below 15 it drops weighted-random ordering and sorts candidates by how close their
-exit lands to the start cube, with a little noise to break ties. The search changes
-personality in mid-flight: an exploration phase gives the track its character, then a greedy
-best-first homing phase lands the plane. Two-phase schemes like this are everywhere in
-combinatorial optimization, and the transferable lesson is that a single ordering policy
+dry in mid-air. So the solver watches its slack, `remaining * 3 - dist_home`, which is how
+many cells of travel it could still afford to waste and get back anyway. Once that slack
+falls below 15 cells, the solver drops weighted-random ordering and sorts candidates by how
+close their exit lands to the start cube, with a little noise to break ties. The search
+changes personality in mid-flight: an exploration phase gives the track its character, then
+a greedy best-first homing phase lands the plane. Two-phase schemes like this are everywhere
+in combinatorial optimization, and the transferable lesson is that a single ordering policy
 rarely serves both halves of a constructive search.
 
 ### 6.4 Restarts and the heavy tail
@@ -326,29 +348,32 @@ Luby, Sinclair and Zuckerman result, which proves that when runtime distribution
 unknown and heavy-tailed a universal restart schedule comes within a log factor of the best
 possible strategy, and that any restart policy beats no restart policy by unbounded factors.
 Measured on my machine with `npx vite-node scripts/bench-generator.ts`, 10 seeds per
-setting:
+setting. Each row names a box of pieces and one of the sidebar's complexity notches, which
+together fix the piece budget and the elevation slider:
 
 ```
 starter balanced (21 pieces, 45% elevation)   median 30ms    p90 61ms    max 201ms
 starter wild     (32 pieces, 90% elevation)   median 163ms   p90 485ms   max 597ms
 deluxe twisty    (48 pieces, 68% elevation)   median 230ms   p90 429ms   max 5.2s
-deluxe wild      (66 pieces, 90% elevation)   median 2.0s    p90 5.3s    4/10 fail raw
+deluxe wild      (66 pieces, 90% elevation)   median 2.0s    p90 5.3s    4 of 10 seeds fail
 ```
 
 Before the schedule, and before the integer grid keys of section 4, those medians sat in the
 tens of seconds. The max to median ratios are still 5 to 20 times even with restarts, so the
-tail shrank but never went away.
+tail shrank but never went away. The bottom row, where the hardest setting leaves 4 seeds in
+10 with no loop at all, is what the next section exists to handle.
 
 ### 6.5 Graceful relaxation
 
-That `4/10 fail` row never reaches the user. The solver runs in a Web Worker
+Those failing seeds never reach the user. The solver runs in a Web Worker
 (`src/core/generator.worker.ts`), and if the full schedule finishes without closing a loop,
-the worker softens the request once, dropping the minimum length to 60% and elevation to
-80%, then runs again and flags the result so the UI can say what happened ("Tough settings,
-relaxed slightly"). It's an availability-over-exactness call, the same posture as a service
-that serves a slightly stale cache entry instead of a 500. For a toy-track generator, a good
-track now beats the requested track never. The flag matters though, because degrading
-silently would misrepresent what the user got.
+the worker softens the request once, cutting the requested minimum length to 60% of what you
+asked for and the elevation to 80%, then runs the whole schedule again and flags the result
+so the UI can say what happened ("Tough settings, relaxed slightly"). It's an
+availability-over-exactness call, the same posture as a service that serves a slightly stale
+cache entry instead of a 500. For a toy-track generator, a good track now beats the
+requested track never. The flag matters though, because degrading silently would
+misrepresent what the user got.
 
 ## 7. Interlude: how many tracks are there?
 

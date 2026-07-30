@@ -87,10 +87,15 @@ const arrow = (
 };
 
 /** Marker when `up` is perpendicular to the drawing plane. */
-const outOfPlaneUp = (x: number, y: number) =>
-    `<circle cx="${r(x)}" cy="${r(y - 14)}" r="5" fill="none" stroke="${COLORS.up}" stroke-width="1.6"/>` +
-    `<circle cx="${r(x)}" cy="${r(y - 14)}" r="1.6" fill="${COLORS.up}"/>` +
-    text(x + 8, y - 10, 'up', { size: 11, fill: COLORS.up, weight: '600' });
+const outOfPlaneUp = (x: number, y: number, label?: string) => {
+    let out =
+        `<circle cx="${r(x)}" cy="${r(y - 14)}" r="5" fill="none" stroke="${COLORS.up}" stroke-width="1.6"/>` +
+        `<circle cx="${r(x)}" cy="${r(y - 14)}" r="1.6" fill="${COLORS.up}"/>`;
+    if (label) {
+        out += text(x + 8, y - 10, label, { size: 11, fill: COLORS.up, weight: '600' });
+    }
+    return out;
+};
 
 // ---------------------------------------------------------------------------
 // 2D projectors: map grid cells → screen pixels inside a panel
@@ -151,22 +156,22 @@ const drawPlacement = (
     out += `<circle cx="${r(x.x)}" cy="${r(x.y)}" r="3.5" fill="${COLORS.exit}"/>`;
     out += `<line x1="${r(e.x)}" y1="${r(e.y)}" x2="${r(x.x)}" y2="${r(x.y)}" ` +
         `stroke="${COLORS.muted}" stroke-width="1" stroke-dasharray="3 2" opacity="0.6"/>`;
-    // Compact unlabeled arrows when labels would sit inside cells (occupancy figs).
+    // Tip labels sit outside crowded cells via the figure legend when frameLabels is off.
     const al = frameLabels ? p.half * 0.95 : p.half * 0.55;
     const d = p.dirScreen(placement.entry.dir, al);
     const u = p.dirScreen(placement.entry.up, al);
     out += arrow(e.x, e.y, e.x + d.x, e.y + d.y, COLORS.dir, frameLabels ? 'dir' : undefined);
     const upDrawn = arrow(e.x, e.y, e.x + u.x, e.y + u.y, COLORS.up, frameLabels ? 'up' : undefined);
-    if (!upDrawn && frameLabels) out += outOfPlaneUp(e.x, e.y);
-    else if (upDrawn) out += upDrawn;
+    if (!upDrawn) out += outOfPlaneUp(e.x, e.y, frameLabels ? 'up' : undefined);
+    else out += upDrawn;
     if (exitFrame) {
-        const exitAl = p.half * 0.7;
+        const exitAl = frameLabels ? p.half * 0.7 : p.half * 0.5;
         const ed = p.dirScreen(placement.exit.dir, exitAl);
         const eu = p.dirScreen(placement.exit.up, exitAl);
         out += arrow(x.x, x.y, x.x + ed.x, x.y + ed.y, COLORS.dir);
         const exitUp = arrow(x.x, x.y, x.x + eu.x, x.y + eu.y, COLORS.up);
-        if (!exitUp && frameLabels) out += outOfPlaneUp(x.x, x.y);
-        else if (exitUp) out += exitUp;
+        if (!exitUp) out += outOfPlaneUp(x.x, x.y, frameLabels ? 'up' : undefined);
+        else out += exitUp;
     }
     return out;
 };
@@ -299,29 +304,34 @@ const PIECE_META: {
 ];
 
 const genPieceMotions = () => {
-    const cellPx = 34;
-    const panelW = 172;
-    const panelH = 220;
-    const cols = 5;
+    // Two rows × three columns so each panel stays readable at GitHub ~680px width.
+    // (Five columns at that width collapsed dir/up arrows into overlapping blobs.)
+    const cellPx = 44;
+    const panelW = 268;
+    const panelH = 248;
+    const cols = 3;
+    const gap = 12;
     const entry = START_STATE;
 
     let body = text(20, 26, 'Each piece is a fixed motion in the local frame', {
         size: 15, weight: '600',
     });
-    body += text(20, 46,
-        'Filled = solid cells. Black = entry, purple = exit. ⊙ marks up when it points out of the page.',
+    body += text(20, 44,
+        'Filled = solid. Black = entry, purple = exit. Blue arrow = dir, green = up; ⊙ = up out of page.',
         { size: 11, fill: COLORS.muted, weight: '400' });
 
     PIECE_META.forEach((meta, i) => {
         const placement = computePlacement(meta.type, entry);
-        const ox = 16 + (i % cols) * panelW;
-        const oy = 62;
-        const pw = panelW - 12;
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const ox = 16 + col * (panelW + gap);
+        const oy = 62 + row * (panelH + gap);
+        const pw = panelW;
         const clipId = `clip-${meta.type}`;
         body += `<rect x="${ox}" y="${oy}" width="${pw}" height="${panelH}" ` +
             `rx="10" fill="#fff" stroke="${COLORS.grid}"/>`;
-        body += text(ox + 12, oy + 22, meta.label, { size: 13, weight: '600' });
-        body += text(ox + 12, oy + 38,
+        body += text(ox + 14, oy + 24, meta.label, { size: 13, weight: '600' });
+        body += text(ox + 14, oy + 42,
             meta.view === 'top' ? 'top-down xz · +x→ +z↓' : 'side xy · +x→ +y↑', {
                 size: 10, fill: COLORS.muted, weight: '400',
             });
@@ -338,10 +348,10 @@ const genPieceMotions = () => {
         const maxY = Math.max(...ys, 0);
 
         // Content area under the title
-        const contentX = ox + 10;
-        const contentY = oy + 48;
-        const contentW = pw - 20;
-        const contentH = panelH - 70;
+        const contentX = ox + 12;
+        const contentY = oy + 52;
+        const contentW = pw - 24;
+        const contentH = panelH - 78;
         body += `<clipPath id="${clipId}"><rect x="${contentX}" y="${contentY}" ` +
             `width="${contentW}" height="${contentH}" rx="4"/></clipPath>`;
         body += `<g clip-path="url(#${clipId})">`;
@@ -381,31 +391,36 @@ const genPieceMotions = () => {
             }
         }
 
-        body += drawPlacement(proj, placement, meta.fill, { swing: false });
-
-        if (meta.type === 'cross') {
-            const far = placement.crossingCell!;
-            const fc = proj.center(far);
-            body += `<text x="${r(fc.x)}" y="${r(fc.y + 4)}" text-anchor="middle" ` +
-                `font-family="ui-sans-serif, system-ui, sans-serif" font-size="10" ` +
-                `font-weight="700" fill="#fff">2</text>`;
-        }
+        // No tip labels inside cells — legend carries dir/up; short arrows + ⊙ remain.
+        body += drawPlacement(proj, placement, meta.fill, {
+            swing: false, frameLabels: false,
+        });
         body += `</g>`;
 
-        if (meta.type === 'outer') {
-            body += text(ox + 12, oy + panelH - 12, 'exit = cell − up', {
-                size: 10, fill: COLORS.red, weight: '600',
+        if (meta.type === 'cross') {
+            // Badge above the far cell (outside clip) so “2” is not buried in the fill.
+            const far = placement.crossingCell!;
+            const fc = proj.center(far);
+            const by = fc.y - proj.half - 10;
+            body += `<circle cx="${r(fc.x)}" cy="${r(by)}" r="9" ` +
+                `fill="${COLORS.purple}" stroke="#fff" stroke-width="1.5"/>`;
+            body += `<text x="${r(fc.x)}" y="${r(by + 4)}" text-anchor="middle" ` +
+                `font-family="ui-sans-serif, system-ui, sans-serif" font-size="12" ` +
+                `font-weight="700" fill="#fff">2</text>`;
+            body += text(ox + 14, oy + panelH - 14, 'route 2 at far cell', {
+                size: 11, fill: COLORS.purple, weight: '600',
             });
         }
-        if (meta.type === 'cross') {
-            body += text(ox + 12, oy + panelH - 12, 'route 2 at far cell', {
-                size: 10, fill: COLORS.purple, weight: '600',
+        if (meta.type === 'outer') {
+            body += text(ox + 14, oy + panelH - 14, 'exit = cell − up', {
+                size: 11, fill: COLORS.red, weight: '600',
             });
         }
     });
 
-    const w = 16 + cols * panelW + 8;
-    const h = 62 + panelH + 20;
+    const rows = Math.ceil(PIECE_META.length / cols);
+    const w = 16 + cols * panelW + (cols - 1) * gap + 16;
+    const h = 62 + rows * panelH + (rows - 1) * gap + 20;
     return svgDoc(w, h, body);
 };
 
@@ -424,14 +439,16 @@ const genSolidVsSwing = () => {
         'Amber dashed = swing. Colored fill = solid. Left/middle from computePlacement; right is the share rule.',
         { size: 11, fill: COLORS.muted, weight: '400' });
 
-    // Axis key drawn outside the crowded cell grid so labels never sit on arrows.
-    const axisKey = (ox: number, oy: number) =>
-        text(ox + 14, oy + 56, 'blue → dir', {
-            size: 10, fill: COLORS.dir, weight: '500',
-        }) +
-        text(ox + 90, oy + 56, 'green → up', {
-            size: 10, fill: COLORS.up, weight: '500',
-        });
+    // Axis key outside the cell grid (ink for contrast; color only on the swatch).
+    const axisKey = (ox: number, oy: number) => {
+        const y = oy + 56;
+        return `<line x1="${ox + 14}" y1="${y - 3}" x2="${ox + 28}" y2="${y - 3}" ` +
+            `stroke="${COLORS.dir}" stroke-width="2.2" stroke-linecap="round"/>` +
+            text(ox + 34, y, 'dir', { size: 11, fill: COLORS.ink, weight: '600' }) +
+            `<line x1="${ox + 70}" y1="${y - 3}" x2="${ox + 84}" y2="${y - 3}" ` +
+            `stroke="${COLORS.up}" stroke-width="2.2" stroke-linecap="round"/>` +
+            text(ox + 90, y, 'up', { size: 11, fill: COLORS.ink, weight: '600' });
+    };
 
     type Panel = { title: string; subtitle: string; build: (ox: number, oy: number) => string };
     const panels: Panel[] = [

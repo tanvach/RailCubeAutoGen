@@ -4,7 +4,7 @@
   "updated": "2026-07-30",
   "generator": "scripts/docs/gen-how-it-works-figures.ts",
   "regenerate": "npx vite-node scripts/docs/gen-how-it-works-figures.ts",
-  "notes": "Schematic SVGs are code-generated from src/core. Photos are hand assets. Mermaid lives inline in the markdown.",
+  "notes": "Schematic SVGs are code-generated from src/core. Photos are hand assets. Mermaid lives inline in the markdown. Consumption-width gate assumes GitHub markdown column ≈680px (narrow check 560px).",
   "graphics": [
     {
       "id": "generated-deluxe",
@@ -16,7 +16,10 @@
       "renderTarget": "markdown image",
       "decision": "validated unchanged",
       "validation": {
-        "rendered": "docs/images/generated-deluxe.png inspected as product hook",
+        "rendered": "docs/images/generated-deluxe.png",
+        "consumptionWidth": "raster PNG; native width fine in GitHub column",
+        "occlusionPlacement": "clear — no diagram labels",
+        "targetSurfaceTheme": "opaque PNG; light GitHub surface",
         "claimMap": "supported as motivational evidence; not load-bearing for §§2–6",
         "freshRead": "reduced confusion at open; right timing"
       }
@@ -34,7 +37,10 @@
         "Wall uses up=(0,0,-1) so the rail face is the visible front of the isometric sketch (+z would be hidden back)."
       ],
       "validation": {
-        "rendered": "rasterized /tmp/how-it-works-renders/track-state-frame.png; −z up arrow projects up-left",
+        "rendered": "/tmp/how-it-works-renders/track-state-frame-{680,560}.png",
+        "consumptionWidth": "680px + 560px emulated GitHub column — clear",
+        "occlusionPlacement": "clear — tip labels outside cube faces; wall up tight but unclipped",
+        "targetSurfaceTheme": "opaque #faf9f7 fill; grayscale keeps floor/wall/ceiling distinguishable via arrow directions + captions",
         "claimMap": "supported: same cell+dir, three ups",
         "freshRead": "highest teaching value; right after interface"
       }
@@ -47,15 +53,19 @@
       "generator": "scripts/docs/gen-how-it-works-figures.ts#genPieceMotions",
       "section": "§3",
       "renderTarget": "markdown image (SVG)",
-      "decision": "validated unchanged",
+      "decision": "repaired",
       "deliberateAbstractions": [
         "Curve R omitted (same physical part as Curve L flipped).",
-        "Cross panel draws route 1 only; '2' marks the crossing cell for route 2."
+        "Cross panel draws route 1 only; badge '2' marks the crossing cell for route 2.",
+        "Two-row × three-column layout so panels stay readable at ~680px."
       ],
       "validation": {
-        "rendered": "rasterized; footprints match computePlacement dump",
+        "rendered": "/tmp/how-it-works-renders/piece-motions-{680,560}.png after 2×3 relayout",
+        "consumptionWidth": "680px + 560px — pass after leaving 5-across layout (failed: tip labels + arrow blobs)",
+        "occlusionPlacement": "repaired — no tip labels in cells; legend carries dir/up; route-2 badge above far cell",
+        "targetSurfaceTheme": "opaque fill; color + ⊙/arrow shape (not color alone)",
         "claimMap": "supported for catalog motions; Cross route-2 is caption-dependent",
-        "freshRead": "reduced confusion; caption clarified route-1 vs route-2 mark"
+        "freshReadPriorIssue": "5-column 680px collapse made Inner/Outer frames unreadable — fixed by 2×3 + unlabeled short arrows"
       }
     },
     {
@@ -76,9 +86,12 @@
         "Right panel is a rule schematic with opposing up arrows, not a full wall-frame placement."
       ],
       "validation": {
-        "rendered": "rasterized at ~680px (GitHub markdown width); frame tip labels removed from cells; rail/swing labels above shared-slot row",
+        "rendered": "/tmp/how-it-works-renders/solid-vs-swing-{680,560}.png",
+        "consumptionWidth": "680px + 560px — pass",
+        "occlusionPlacement": "repaired — axis key outside cells (ink labels + color swatches); rail/swing labels above shared-slot row",
+        "targetSurfaceTheme": "opaque fill; dashed stroke + fill distinguish swing without color alone",
         "claimMap": "left/middle supported from computePlacement; right supported as schematic + photo",
-        "freshReadPriorIssue": "tip labels up/dir/swing sat under arrows at GitHub scale — fixed by unlabeled short arrows + external axis key / label row"
+        "freshRead": "reduced confusion; share panel strongest"
       }
     },
     {
@@ -91,12 +104,15 @@
       "renderTarget": "markdown image",
       "decision": "validated unchanged",
       "deliberateAbstractions": [
-        "App render of the manual course, not a photo of the printed page."
+        "App render of the manual course, not a photo of the printed page.",
+        "Shared slot is not annotated on the screenshot — schematic above carries that claim."
       ],
       "validation": {
         "rendered": "docs/images/manual-frame.png",
+        "consumptionWidth": "native PNG scales down cleanly",
+        "occlusionPlacement": "clear UI chrome; slot itself is caption-dependent",
         "claimMap": "partial alone; necessity of shareable swing is prose + schematic",
-        "freshRead": "right payoff after schematic; caption required"
+        "freshRead": "right payoff after schematic; caption required; mild redundancy with share panel"
       }
     },
     {
@@ -107,14 +123,16 @@
       "generator": "inline mermaid in docs/HOW_IT_WORKS.md",
       "section": "§5",
       "renderTarget": "GitHub/markdown mermaid render",
-      "decision": "repaired",
+      "decision": "validated unchanged",
       "deliberateAbstractions": [
         "Omits inventory, separate prune bounds, restarts, and relaxation (§6)."
       ],
       "validation": {
-        "rendered": "source graph: A2 now edges back to A (was a visual dead-end)",
-        "claimMap": "supported as control-flow skeleton",
-        "freshReadPriorIssue": "cross-pass node had no outgoing edge — fixed"
+        "rendered": "source graph: A2 → A and L → A close the recursion (not dead-ends)",
+        "consumptionWidth": "GitHub mermaid; not re-rasterized this run",
+        "occlusionPlacement": "n/a (host-rendered nodes)",
+        "claimMap": "supported as control-flow skeleton; high redundancy vs pseudocode above",
+        "freshRead": "reduced confusion as a map; low new information vs prose"
       }
     },
     {
@@ -135,7 +153,10 @@
         "Reuses floor/ceiling framing from track-state-frame on purpose."
       ],
       "validation": {
-        "rendered": "rasterized; cost-1 dir=(0,0,-1) projects up-left; asserts 0/1/4 at generate time",
+        "rendered": "/tmp/how-it-works-renders/orientation-debt-{680,560}.png",
+        "consumptionWidth": "680px + 560px — clear",
+        "occlusionPlacement": "clear — tip labels readable; red 4 emphasis ok",
+        "targetSurfaceTheme": "opaque fill; cost number + caption (not color alone)",
         "claimMap": "supported for illustrated bounds; uniqueness of cost 4 is table/prose",
         "freshRead": "reduced confusion after the table"
       }
@@ -155,12 +176,17 @@
     {
       "candidate": "Frenet vs parallel-transport diagram (§8)",
       "decision": "defer",
-      "why": "cold reader prioritized piece motions and solver flow; text carries §8 for undergrad-math readers"
+      "why": "cold reader prioritized piece motions and track-state frames; text carries §8 for undergrad-math readers"
     },
     {
       "candidate": "new Cross route-1/route-2 rendezvous figure",
       "decision": "defer",
       "why": "piece-motions caption + §5/§10 prose cover it; medium hallucination risk for a forward-search exclusion"
+    },
+    {
+      "candidate": "annotated shared-slot callout on manual-frame.png",
+      "decision": "reject",
+      "why": "solid-vs-swing share panel already states the rule; annotating the product screenshot adds maintenance without new claim"
     }
   ]
 }

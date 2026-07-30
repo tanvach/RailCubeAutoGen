@@ -113,9 +113,9 @@ document use the same names.
 ![Piece rigid motions](images/piece-motions.svg)
 
 *Footprints and exit frames from `computePlacement`, entered at the start state. Top-down
-panels use +x right and +z down the page; side panels use +x right and +y up. ⊙ means `up`
-points out of the page (+y in the top-down views). The cross panel draws route 1; the “2”
-marks where route 2 would cross later.*
+panels use +x right and +z down the page; side panels use +x right and +y up. Blue arrows
+are `dir`, green are `up`; ⊙ means `up` points out of the page. The cross panel draws
+route 1; the “2” badge marks where route 2 would cross later.*
 
 Two consequences of that table shape the solver.
 

@@ -3,6 +3,9 @@
 Scripts here rebuild the schematic SVGs used by `docs/HOW_IT_WORKS.md`.
 They are not part of the app build.
 
+Graphics inventory / validation state for that doc lives in
+[`scripts/graphics/how-it-works.manifest.json`](../graphics/how-it-works.manifest.json).
+
 ## How It Works figures
 
 ```bash

@@ -114,7 +114,8 @@ document use the same names.
 
 *Footprints and exit frames from `computePlacement`, entered at the start state. Top-down
 panels use +x right and +z down the page; side panels use +x right and +y up. ⊙ means `up`
-points out of the page (+y in the top-down views).*
+points out of the page (+y in the top-down views). The cross panel draws route 1; the “2”
+marks where route 2 would cross later.*
 
 Two consequences of that table shape the solver.
 
@@ -155,8 +156,9 @@ something I only got after staring at the printed manual.
 
 ![Solid vs swing cells](images/solid-vs-swing.svg)
 
-*Left and middle: footprints from `computePlacement`. Right: the shareable-swing rule that
-makes the slotted frame legal.*
+*Left and middle: solid + swing cells from `computePlacement` (outer’s corner swings are
+in-plane, so they can actually be drawn). Right: the shareability rule — two rails may both
+claim the amber cell — which makes the slotted frame below legal.*
 
 ![Manual frame example](images/manual-frame.png)
 
@@ -234,6 +236,7 @@ flowchart TD
     B -- no --> D{cell ahead solid?}
     D -- yes --> E{legal cross route-2 pass?}
     E -- yes --> A2[recurse past the cross]
+    A2 --> A
     E -- no --> F2[dead end, backtrack]
     D -- no --> P{prune: home still reachable?}
     P -- no --> F2

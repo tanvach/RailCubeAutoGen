@@ -422,7 +422,7 @@ const genSolidVsSwing = () => {
         size: 15, weight: '600',
     });
     body += text(20, 46,
-        'Amber dashed = swing (clearance). Colored fill = solid. Geometry from computePlacement.',
+        'Amber dashed = swing. Colored fill = solid. Left/middle from computePlacement; right is the share rule.',
         { size: 11, fill: COLORS.muted, weight: '400' });
 
     type Panel = { title: string; subtitle: string; build: (ox: number, oy: number) => string };
@@ -432,43 +432,41 @@ const genSolidVsSwing = () => {
             subtitle: '1 solid + 1 swing above',
             build: (ox, oy) => {
                 const placement = computePlacement('straight', START_STATE);
-                const p = sideView(ox + 50, oy + 50, 44, 1.5);
+                const p = sideView(ox + 50, oy + 56, 40, 1.5);
                 let out = '';
                 for (const c of [v(0, 0, 0), v(0, 1, 0), v(1, 0, 0)]) {
                     const pt = p.center(c);
-                    out += `<rect x="${pt.x - p.half}" y="${pt.y - p.half}" width="44" height="44" ` +
+                    out += `<rect x="${r(pt.x - p.half)}" y="${r(pt.y - p.half)}" width="40" height="40" ` +
                         `fill="none" stroke="${COLORS.grid}"/>`;
                 }
                 out += drawPlacement(p, placement, COLORS.yellow, { swing: true });
+                out += text(ox + 14, oy + 200, 'side xy · +x→ +y↑', {
+                    size: 10, fill: COLORS.muted, weight: '400',
+                });
                 return out;
             },
         },
         {
-            title: 'Curve L',
-            subtitle: '4 solids; swings at +up (⊙)',
+            // Outer’s swings lie in the dir/up plane, so they are drawable here.
+            // Curve L’s swings sit at +up out of a top-down view — that panel was
+            // claiming amber cells it never drew.
+            title: 'Outer',
+            subtitle: '1 solid + 3 corner swings',
             build: (ox, oy) => {
-                const placement = computePlacement('curveLeft', START_STATE);
-                // Top-down (+x→, +z↓); swing is +up out of page.
-                const p = topDown(ox + 36, oy + 44, 36);
+                const placement = computePlacement('outer', START_STATE);
+                const p = sideView(ox + 40, oy + 56, 36, 1.5);
                 let out = '';
                 for (let x = 0; x <= 1; x++) {
-                    for (let z = -1; z <= 0; z++) {
-                        const c = p.center(v(x, 0, z));
-                        out += `<rect x="${c.x - p.half}" y="${c.y - p.half}" width="36" height="36" ` +
+                    for (let y = -1; y <= 1; y++) {
+                        const pt = p.center(v(x, y, 0));
+                        out += `<rect x="${r(pt.x - p.half)}" y="${r(pt.y - p.half)}" width="36" height="36" ` +
                             `fill="none" stroke="${COLORS.grid}"/>`;
                     }
                 }
-                for (const c of placement.cells) {
-                    out += cellRect(p, c, COLORS.blue, COLORS.solidStroke);
-                }
-                out += text(ox + 14, oy + 188, 'top-down +x→ +z↓ · swing = +y (⊙)', {
+                out += drawPlacement(p, placement, COLORS.red, { swing: true });
+                out += text(ox + 14, oy + 200, 'side xy · swings from computePlacement', {
                     size: 10, fill: COLORS.swingStroke, weight: '600',
                 });
-                const e = p.center(placement.entry.cell);
-                const x = p.center(placement.exit.cell);
-                out += `<circle cx="${e.x}" cy="${e.y}" r="3.5" fill="${COLORS.entry}"/>`;
-                out += `<circle cx="${x.x}" cy="${x.y}" r="3.5" fill="${COLORS.exit}"/>`;
-                out += drawFrame(p, placement.entry);
                 return out;
             },
         },
@@ -476,31 +474,35 @@ const genSolidVsSwing = () => {
             title: 'Shared swing slot',
             subtitle: 'Two rails, one clearance cell',
             build: (ox, oy) => {
-                // Rule schematic (not a full placement replay): two facing rails
-                // share one swing cell — the constraint §4 teaches before the photo.
-                const p = topDown(ox + 40, oy + 50, 48);
+                // Rule schematic (not a placement replay): facing rails both claim
+                // the middle cell as swing — the §4 permission before the photo.
+                const p = topDown(ox + 40, oy + 56, 44);
                 let out = '';
                 const left = v(0, 0, 0);
                 const swing = v(1, 0, 0);
                 const right = v(2, 0, 0);
                 for (const c of [left, swing, right]) {
                     const pt = p.center(c);
-                    out += `<rect x="${pt.x - p.half}" y="${pt.y - p.half}" width="48" height="48" ` +
+                    out += `<rect x="${r(pt.x - p.half)}" y="${r(pt.y - p.half)}" width="44" height="44" ` +
                         `fill="none" stroke="${COLORS.grid}"/>`;
                 }
                 out += cellRect(p, left, COLORS.blue, COLORS.solidStroke);
                 out += cellRect(p, right, COLORS.green, COLORS.solidStroke);
                 out += cellRect(p, swing, COLORS.swing, COLORS.swingStroke, true);
-                out += text(p.center(left).x, p.center(left).y + 4, 'rail', {
+                const lc = p.center(left), rc = p.center(right), sc = p.center(swing);
+                out += text(lc.x, lc.y + 4, 'rail', {
                     size: 10, fill: '#fff', weight: '700', anchor: 'middle',
                 });
-                out += text(p.center(right).x, p.center(right).y + 4, 'rail', {
+                out += text(rc.x, rc.y + 4, 'rail', {
                     size: 10, fill: '#fff', weight: '700', anchor: 'middle',
                 });
-                out += text(p.center(swing).x, p.center(swing).y + 4, 'swing', {
+                out += text(sc.x, sc.y + 4, 'swing', {
                     size: 10, fill: COLORS.swingStroke, weight: '700', anchor: 'middle',
                 });
-                out += text(ox + 14, oy + 188, 'shareable — see manual frame below', {
+                // Opposing up normals into the shared cell (schematic).
+                out += arrow(lc.x + 10, lc.y, sc.x - 8, sc.y, COLORS.up);
+                out += arrow(rc.x - 10, rc.y, sc.x + 8, sc.y, COLORS.up);
+                out += text(ox + 14, oy + 200, 'rule schematic — see photo below', {
                     size: 10, fill: COLORS.muted, weight: '400',
                 });
                 return out;

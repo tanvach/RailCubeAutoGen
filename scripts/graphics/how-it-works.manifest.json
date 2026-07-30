@@ -1,0 +1,166 @@
+{
+  "document": "docs/HOW_IT_WORKS.md",
+  "slug": "how-it-works",
+  "updated": "2026-07-30",
+  "generator": "scripts/docs/gen-how-it-works-figures.ts",
+  "regenerate": "npx vite-node scripts/docs/gen-how-it-works-figures.ts",
+  "notes": "Schematic SVGs are code-generated from src/core. Photos are hand assets. Mermaid lives inline in the markdown.",
+  "graphics": [
+    {
+      "id": "generated-deluxe",
+      "readerQuestion": "What does a successful generated course look like?",
+      "sourceInputs": ["app product screenshot"],
+      "outputPath": "docs/images/generated-deluxe.png",
+      "generator": null,
+      "section": "§1",
+      "renderTarget": "markdown image",
+      "decision": "validated unchanged",
+      "validation": {
+        "rendered": "docs/images/generated-deluxe.png inspected as product hook",
+        "claimMap": "supported as motivational evidence; not load-bearing for §§2–6",
+        "freshRead": "reduced confusion at open; right timing"
+      }
+    },
+    {
+      "id": "track-state-frame",
+      "readerQuestion": "Why isn’t (cell, heading) enough — what does up change?",
+      "sourceInputs": ["src/core/pieces.ts TrackState", "START_STATE conventions"],
+      "outputPath": "docs/images/track-state-frame.svg",
+      "generator": "scripts/docs/gen-how-it-works-figures.ts#genTrackStateFrame",
+      "section": "§2",
+      "renderTarget": "markdown image (SVG)",
+      "decision": "validated unchanged",
+      "deliberateAbstractions": [
+        "Wall uses up=(0,0,-1) so the rail face is the visible front of the isometric sketch (+z would be hidden back)."
+      ],
+      "validation": {
+        "rendered": "rasterized /tmp/how-it-works-renders/track-state-frame.png; −z up arrow projects up-left",
+        "claimMap": "supported: same cell+dir, three ups",
+        "freshRead": "highest teaching value; right after interface"
+      }
+    },
+    {
+      "id": "piece-motions",
+      "readerQuestion": "For each piece, which cells and how do exit dir/up change?",
+      "sourceInputs": ["src/core/pieces.ts computePlacement", "START_STATE"],
+      "outputPath": "docs/images/piece-motions.svg",
+      "generator": "scripts/docs/gen-how-it-works-figures.ts#genPieceMotions",
+      "section": "§3",
+      "renderTarget": "markdown image (SVG)",
+      "decision": "validated unchanged",
+      "deliberateAbstractions": [
+        "Curve R omitted (same physical part as Curve L flipped).",
+        "Cross panel draws route 1 only; '2' marks the crossing cell for route 2."
+      ],
+      "validation": {
+        "rendered": "rasterized; footprints match computePlacement dump",
+        "claimMap": "supported for catalog motions; Cross route-2 is caption-dependent",
+        "freshRead": "reduced confusion; caption clarified route-1 vs route-2 mark"
+      }
+    },
+    {
+      "id": "solid-vs-swing",
+      "readerQuestion": "What are swing cells, and why may two pieces share one?",
+      "sourceInputs": [
+        "src/core/pieces.ts computePlacement swing arrays",
+        "src/core/grid.ts shareable swing rule",
+        "§4 prose"
+      ],
+      "outputPath": "docs/images/solid-vs-swing.svg",
+      "generator": "scripts/docs/gen-how-it-works-figures.ts#genSolidVsSwing",
+      "section": "§4",
+      "renderTarget": "markdown image (SVG)",
+      "decision": "repaired",
+      "deliberateAbstractions": [
+        "Middle panel is Outer (in-plane swings) instead of Curve L (swings out of top-down view).",
+        "Right panel is a rule schematic with opposing up arrows, not a full wall-frame placement."
+      ],
+      "validation": {
+        "rendered": "re-rasterized after Outer swap; amber swings visible on Straight and Outer",
+        "claimMap": "left/middle supported from computePlacement; right supported as schematic + photo",
+        "freshReadPriorIssue": "Curve L claimed swings without drawing them — fixed by switching to Outer"
+      }
+    },
+    {
+      "id": "manual-frame",
+      "readerQuestion": "What physical build requires shareable swing cells?",
+      "sourceInputs": ["transcribed manual slotted-frame course", "app render"],
+      "outputPath": "docs/images/manual-frame.png",
+      "generator": null,
+      "section": "§4",
+      "renderTarget": "markdown image",
+      "decision": "validated unchanged",
+      "deliberateAbstractions": [
+        "App render of the manual course, not a photo of the printed page."
+      ],
+      "validation": {
+        "rendered": "docs/images/manual-frame.png",
+        "claimMap": "partial alone; necessity of shareable swing is prose + schematic",
+        "freshRead": "right payoff after schematic; caption required"
+      }
+    },
+    {
+      "id": "solver-flowchart",
+      "readerQuestion": "What decisions does the backtracker make at each step?",
+      "sourceInputs": ["src/core/generator.ts solve()", "§5 pseudocode"],
+      "outputPath": "docs/HOW_IT_WORKS.md#mermaid",
+      "generator": "inline mermaid in docs/HOW_IT_WORKS.md",
+      "section": "§5",
+      "renderTarget": "GitHub/markdown mermaid render",
+      "decision": "repaired",
+      "deliberateAbstractions": [
+        "Omits inventory, separate prune bounds, restarts, and relaxation (§6)."
+      ],
+      "validation": {
+        "rendered": "source graph: A2 now edges back to A (was a visual dead-end)",
+        "claimMap": "supported as control-flow skeleton",
+        "freshReadPriorIssue": "cross-pass node had no outgoing edge — fixed"
+      }
+    },
+    {
+      "id": "orientation-debt",
+      "readerQuestion": "What does orientationLowerBound mean, especially cost 4?",
+      "sourceInputs": [
+        "src/core/generator.ts orientationLowerBound",
+        "curveLeft exit frame",
+        "§6.1 table"
+      ],
+      "outputPath": "docs/images/orientation-debt.svg",
+      "generator": "scripts/docs/gen-how-it-works-figures.ts#genOrientationDebt",
+      "section": "§6.1",
+      "renderTarget": "markdown image (SVG)",
+      "decision": "validated unchanged",
+      "deliberateAbstractions": [
+        "Shows costs 0/1/4 only; full 1/4/10/8/1 distribution stays in the table.",
+        "Reuses floor/ceiling framing from track-state-frame on purpose."
+      ],
+      "validation": {
+        "rendered": "rasterized; cost-1 dir=(0,0,-1) projects up-left; asserts 0/1/4 at generate time",
+        "claimMap": "supported for illustrated bounds; uniqueness of cost 4 is table/prose",
+        "freshRead": "reduced confusion after the table"
+      }
+    }
+  ],
+  "rejectedOrDeferred": [
+    {
+      "candidate": "full 24-node Cayley graph",
+      "decision": "reject",
+      "why": "high work/risk; orientation-debt + table already compress the metric"
+    },
+    {
+      "candidate": "Luby restart / heavy-tail chart",
+      "decision": "reject",
+      "why": "numbers table in §6.4 is enough; does not unblock the model"
+    },
+    {
+      "candidate": "Frenet vs parallel-transport diagram (§8)",
+      "decision": "defer",
+      "why": "cold reader prioritized piece motions and solver flow; text carries §8 for undergrad-math readers"
+    },
+    {
+      "candidate": "new Cross route-1/route-2 rendezvous figure",
+      "decision": "defer",
+      "why": "piece-motions caption + §5/§10 prose cover it; medium hallucination risk for a forward-search exclusion"
+    }
+  ]
+}

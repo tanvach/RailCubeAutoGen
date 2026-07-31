@@ -135,7 +135,7 @@ const showToast = (msg: string) => {
 const worker = new Worker(new URL('./core/generator.worker.ts', import.meta.url), { type: 'module' });
 
 worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
-    const { type, data, message, relaxed } = e.data;
+    const { type, data, message, relaxed, note } = e.data;
 
     if (type === 'progress') {
         loadingText.textContent = message || 'Generating…';
@@ -147,7 +147,7 @@ worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
 
     if (type === 'success' && data) {
         applyTrack(data);
-        if (relaxed) showToast('Those settings were very tough — relaxed them slightly to close the loop.');
+        if (relaxed) showToast(note || 'Those settings were very tough — relaxed them slightly to close the loop.');
     } else {
         showToast(message || 'Failed to generate a track.');
     }
@@ -168,7 +168,9 @@ const sidebar = new Sidebar('sidebar-container', {
     onGenerate: (state) => {
         sidebar.setLoading(true);
         loadingOverlay.classList.remove('hidden');
-        loadingText.textContent = 'Searching for a closed loop…';
+        loadingText.textContent = state.style === 'showcase'
+            ? 'Exploring layouts for an interesting track…'
+            : 'Searching for a closed loop…';
 
         const req: WorkerRequest = {
             inventory: state.inventory,
@@ -176,6 +178,8 @@ const sidebar = new Sidebar('sidebar-container', {
                 minPieces: state.minPieces,
                 maxPieces: state.maxPieces,
                 elevation: state.elevation,
+                crossMode: state.crossMode,
+                style: state.style,
             },
         };
         worker.postMessage(req);

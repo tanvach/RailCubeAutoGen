@@ -131,7 +131,7 @@ describe('generator', () => {
         }
     });
 
-    it('never places cross pieces even when the inventory has them', () => {
+    it('never places cross pieces by default, even when the inventory has them', () => {
         const track = generateTrack(DELUXE_SET, {
             minPieces: 14, maxPieces: 36, elevation: 0.4, seed: 7,
         }, 20);
@@ -139,6 +139,48 @@ describe('generator', () => {
         validate(track!);
         expect(track!.pieces.every((p) => p.type !== 'cross')).toBe(true);
         expect(track!.used.cross).toBe(0);
+    });
+
+    it('straight crossMode lays crosses as 2-unit straight track', () => {
+        const track = generateTrack(DELUXE_SET, {
+            minPieces: 14, maxPieces: 30, elevation: 0.3, seed: 300, crossMode: 'straight',
+        });
+        expect(track).not.toBeNull();
+        validate(track!);
+        usedWithin(track!, DELUXE_SET);
+        expect(track!.used.cross).toBeGreaterThan(0);
+    });
+
+    it('crossing crossMode closes a figure-8: every cross re-crossed via route 2', () => {
+        for (const seed of [200, 204]) {
+            const track = generateTrack(DELUXE_SET, {
+                minPieces: 14, maxPieces: 30, elevation: 0.35, seed, crossMode: 'crossing',
+            });
+            expect(track, `seed ${seed}`).not.toBeNull();
+            validate(track!);
+            usedWithin(track!, DELUXE_SET);
+            const crosses = track!.pieces.filter((p) => p.type === 'cross').length;
+            const passes = track!.steps.filter((s) => s.kind === 'crossPass').length;
+            expect(crosses).toBeGreaterThan(0);
+            expect(passes).toBe(crosses);
+        }
+    });
+
+    it('crossing crossMode fails fast when the kit has no cross pieces', () => {
+        const t0 = performance.now();
+        const track = generateTrack(STARTER_SET, {
+            minPieces: 10, maxPieces: 20, elevation: 0, seed: 1, crossMode: 'crossing',
+        });
+        expect(track).toBeNull();
+        expect(performance.now() - t0).toBeLessThan(500);
+    });
+
+    it('is deterministic for a given seed in crossing mode', () => {
+        const opts = { minPieces: 14, maxPieces: 30, elevation: 0.35, seed: 200, crossMode: 'crossing' as const };
+        const a = generateTrack(DELUXE_SET, opts);
+        const b = generateTrack(DELUXE_SET, opts);
+        expect(a).not.toBeNull();
+        expect(JSON.stringify(a)).toBe(JSON.stringify(b));
     });
 
     it('respects a tiny inventory or fails cleanly', () => {

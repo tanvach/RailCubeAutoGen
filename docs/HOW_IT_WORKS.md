@@ -217,12 +217,19 @@ RNG is `mulberry32`, a tiny seedable generator, so the search is fully determini
 given seed and settings. That makes failures reproducible and property tests meaningful
 (section 9).
 
-One exclusion is intentional: the generator never *places* cross pieces. A cross only earns
-its keep if the loop later hits its far cell again on route 2, and a forward search cannot
-plan that rendezvous with its own future. Placed greedily, crosses acted like over-wide
-straights and cluttered the assembly program. The model still knows how to *traverse* a
-cross that is already on the board — that is how the transcribed manual courses in section 9
-replay. Section 10 sketches how a future search could place them on purpose.
+Cross pieces are opt-in (`crossMode`), because a cross only earns its keep if the loop
+later hits its far cell again on route 2, and a forward search cannot plan that rendezvous
+with its own future. By default they are never placed. In `'straight'` mode they are placed
+as what they locally are — a two-unit straight — and a route-2 pass is taken only if the
+loop happens to line one up. `'crossing'` mode is the interesting one: rather than planning
+the rendezvous, the solver *demands* it — closure is refused until every placed cross has
+been re-crossed — and three nudges make that demand findable. The distance prune charges
+the detour through the owed "2" cell, homing retargets from the start cube to the two free
+cells beside it (aiming at the crossing cell itself steers into the cross's long axis,
+which can never connect), and a mild weight bends the wander back toward them. Figure-8
+seeds either close fast or not at all, so crossing mode also runs a restart-heavier
+schedule (section 6.4), and the worker falls back to `'straight'` when a figure-8 truly
+won't close.
 
 ### The recursion in one diagram
 
@@ -524,10 +531,13 @@ space with pivot-style moves: cut a track, rotate a section, re-validate. That w
 enable a feature I want anyway, mutating an existing track slightly instead of regenerating
 from scratch.
 
-Cross pieces are never generated (section 5). Placing one on purpose means planning a
-rendezvous with your own future. Bidirectional search fits: grow two arcs from the start and
-stitch them where they meet, using the cross as the splice. Declaring the crossing cell a
-waypoint would work too. Clearest open problem in the project, and probably the most fun.
+Cross placement is demanded, not planned (section 5). The waypoint treatment closes
+figure-8s reliably at sane settings, but it is still forward search hoping to meet its own
+past, and at extreme settings (very long, very vertical) it degrades to the straight-cross
+fallback. Bidirectional search remains the principled fix: grow two arcs from the start and
+stitch them where they meet, using the cross as the splice. Same story for the aesthetic
+score behind the UI's Interesting mode (`src/core/score.ts`) — today it only *selects*
+among finished candidates; folding it into the search as a beam objective is open.
 
 The two lower bounds don't talk to each other. Position debt and orientation debt (section
 6.1) are each exact on their own, but the solver combines them with a `max`, and the joint
@@ -577,7 +587,7 @@ view of 50 saved tracks.
 
 ---
 
-*Found an error, or solved the cross-piece problem? Open an issue. The whole model is about
+*Found an error, or built the bidirectional cross search? Open an issue. The whole model is about
 500 lines of dependency-free TypeScript in [`src/core/`](../src/core), and it's a fun
 codebase to poke at. Schematic figures in this doc regenerate from the piece model via
 [`scripts/docs/gen-how-it-works-figures.ts`](../scripts/docs/gen-how-it-works-figures.ts).*

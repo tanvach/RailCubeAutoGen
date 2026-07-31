@@ -81,6 +81,16 @@ Placement rules enforced by the model:
   tailed), and if extreme settings can't close, the worker relaxes them slightly once
   instead of failing. The full story, with the math behind each heuristic, is in
   [How It Works](docs/HOW_IT_WORKS.md).
+- **Cross pieces (purple)** — off by default; a checkbox turns them on with two styles.
+  **Straight ×2** lays a cross flat as two-unit straight track (route 1). **Crossing**
+  requires the loop to weave back through the marked "2" cell perpendicular — a true
+  figure-8, like the manual's cross courses. Crossing search steers the loop back toward
+  the owed route-2 cell and leans on extra restarts; if a figure-8 truly can't close, the
+  worker falls back to straight crosses and says so.
+- **Interesting mode** — generates several candidate tracks (up to ~15 s) and keeps the
+  one that scores best on the qualities of the manual's showcase layouts: a compact
+  interlocked footprint, track passing over itself, multiple heights, wall/ceiling riding,
+  a varied piece mix, and figure-8 crossings.
 - **3D viewport** — faithful piece meshes (near-flush steel rail strips, two-tone curves
   with grooves on both faces, concave/convex wedge profiles, connector knobs), minimal
   support pillars (only under long floating runs), OrbitControls, and an animated train that
@@ -132,7 +142,8 @@ src/
     vec.ts         Integer vector math (axis-aligned only)
     pieces.ts      Piece types, footprints, exit-state transforms, inventories
     grid.ts        Occupancy grid (solid cells + shared swing cells, floor)
-    generator.ts   Seeded backtracking loop generator
+    generator.ts   Seeded backtracking loop generator (incl. cross modes)
+    score.ts       Aesthetic scoring used by the worker's "interesting" mode
     replay.ts      Interpret a fixed piece program into placed geometry
     examples.ts    Ground-truth programs transcribed from the printed manual
     generator.worker.ts  Web Worker wrapper (keeps generation off the UI thread)
@@ -160,15 +171,17 @@ docs/
   floor constraint rejection.
 - **`generator`** — property tests: every generated track is re-validated from scratch
   (placement legality, chain continuity, loop closure, floor, inventory limits) across many
-  seeds; determinism per seed.
+  seeds; determinism per seed; cross modes (straights used, figure-8s re-crossed).
+- **`score`** — the aesthetic score prefers the manual's slotted frame and figure-8s over
+  plain ovals, and penalizes long straight drags.
 - **`ui`** — sidebar state flow and instructions rendering.
 
 ## Known simplifications
 
-- The generator deliberately never places **cross** pieces: a cross is only purposeful when
-  the loop re-crosses it via route 2, which forward search can't plan for, so generated
-  crosses were just confusing straight-substitutes. Cross pieces remain fully supported in
-  replayed manual programs, favorites, and the assembly instructions.
+- **Crossing** mode aims for exactly the figure-8s the manual shows, so it insists every
+  placed cross is re-crossed via route 2. At extreme settings (very long + very vertical)
+  that sometimes can't close; the worker then softens the request and finally falls back
+  to laying crosses as straights, with a toast explaining what happened.
 - Support pillars are visual only. Placement is heuristic: pieces resting on the ground or
   on other pieces count as anchored, and every third consecutive floating piece gets one
   pillar (connectors hold short spans on the real toy).

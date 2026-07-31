@@ -1,10 +1,15 @@
 import { Inventory, InventoryKey, STARTER_SET, DELUXE_SET } from '../core/pieces';
+import { CrossMode } from '../core/generator';
 
 export interface SidebarState {
     inventory: Inventory;
     minPieces: number;
     maxPieces: number;
     elevation: number;
+    /** How the generator may use purple cross pieces. */
+    crossMode: CrossMode;
+    /** 'showcase' = generate many candidates, keep the most interesting. */
+    style: 'classic' | 'showcase';
 }
 
 type OnGenerateCallback = (state: SidebarState) => void;
@@ -47,6 +52,9 @@ export class Sidebar {
     private complexity = 3; // 1..5 Balanced — only used in simple mode
     private showTrain = true;
     private saveEnabled = false;
+    private useCross = false;
+    private crossStyle: 'straight' | 'crossing' = 'crossing';
+    private interesting = false;
 
     constructor(containerId: string, onGenerate: OnGenerateCallback, onSave?: () => void);
     constructor(containerId: string, callbacks: SidebarCallbacks);
@@ -98,6 +106,9 @@ export class Sidebar {
             // Prefer showTrain; accept the older trainMoving key from a prior build.
             if (typeof s.showTrain === 'boolean') this.showTrain = s.showTrain;
             else if (typeof s.trainMoving === 'boolean') this.showTrain = s.trainMoving;
+            if (typeof s.useCross === 'boolean') this.useCross = s.useCross;
+            if (s.crossStyle === 'straight' || s.crossStyle === 'crossing') this.crossStyle = s.crossStyle;
+            if (typeof s.interesting === 'boolean') this.interesting = s.interesting;
         } catch {
             // Corrupt or unavailable storage: keep defaults.
         }
@@ -113,6 +124,9 @@ export class Sidebar {
                 mode: this.mode,
                 complexity: this.complexity,
                 showTrain: this.showTrain,
+                useCross: this.useCross,
+                crossStyle: this.crossStyle,
+                interesting: this.interesting,
             }));
         } catch {
             // Storage unavailable: selections just won't stick.
@@ -141,6 +155,8 @@ export class Sidebar {
             minPieces: Math.min(Math.max(6, Math.floor(maxPieces * 0.6)), maxPieces),
             maxPieces,
             elevation,
+            crossMode: this.useCross && this.inventory.cross > 0 ? this.crossStyle : 'off',
+            style: this.interesting ? 'showcase' : 'classic',
         };
     }
 
@@ -238,6 +254,38 @@ export class Sidebar {
             class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-orange-500">
         </div>`}
 
+        <div class="space-y-2 pt-1">
+          <label class="flex items-center gap-2 text-sm text-gray-600 select-none
+            ${this.inventory.cross > 0 ? 'cursor-pointer' : 'opacity-50'}">
+            <input type="checkbox" id="cross-toggle" ${this.useCross ? 'checked' : ''}
+              ${this.inventory.cross > 0 ? '' : 'disabled'}
+              class="h-4 w-4 rounded border-gray-300 accent-purple-600 cursor-pointer" />
+            Use cross pieces <span class="font-semibold text-purple-600">(purple)</span>
+          </label>
+          <p id="cross-none-hint" class="text-[11px] text-gray-400 ${this.inventory.cross > 0 ? 'hidden' : ''}">
+            This kit has no cross pieces — pick the Deluxe Set or add some in a custom inventory.</p>
+          <div id="cross-style-box" class="${this.useCross && this.inventory.cross > 0 ? '' : 'hidden'} space-y-1 pl-6">
+            <div class="grid grid-cols-2 gap-1 bg-gray-100 rounded-lg p-1 text-xs font-semibold">
+              <button data-cross-style="straight" class="rounded-md py-1 transition
+                ${this.crossStyle === 'straight' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'}">Straight ×2</button>
+              <button data-cross-style="crossing" class="rounded-md py-1 transition
+                ${this.crossStyle === 'crossing' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'}">Crossing</button>
+            </div>
+            <p class="text-[11px] text-gray-400">${this.crossStyle === 'crossing'
+                ? 'The loop weaves back through the cross (routes 1 → 2), figure-8 style. Searches longer.'
+                : 'Crosses lay flat as 2-unit straight track (route 1).'}</p>
+          </div>
+        </div>
+
+        <label class="flex items-start gap-2 text-sm text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" id="interesting-toggle" ${this.interesting ? 'checked' : ''}
+            class="mt-0.5 h-4 w-4 rounded border-gray-300 accent-blue-600 cursor-pointer" />
+          <span>Interesting mode
+            <span class="block text-[11px] font-normal text-gray-400">Tries many layouts and keeps the most
+              interesting (bridges, weaves, levels). Takes up to ~15 s.</span>
+          </span>
+        </label>
+
         <button id="generate-btn"
           class="w-full bg-blue-600 text-white font-bold py-2.5 px-4 rounded-lg hover:bg-blue-700 transition shadow">
           Generate Track
@@ -305,6 +353,25 @@ export class Sidebar {
             });
         });
 
+        q<HTMLInputElement>('#cross-toggle')?.addEventListener('change', (e) => {
+            this.useCross = (e.target as HTMLInputElement).checked;
+            this.persist();
+            this.render();
+        });
+
+        this.container.querySelectorAll<HTMLButtonElement>('[data-cross-style]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                this.crossStyle = btn.dataset.crossStyle as 'straight' | 'crossing';
+                this.persist();
+                this.render();
+            });
+        });
+
+        q<HTMLInputElement>('#interesting-toggle')?.addEventListener('change', (e) => {
+            this.interesting = (e.target as HTMLInputElement).checked;
+            this.persist();
+        });
+
         q<HTMLInputElement>('#complexity-slider')?.addEventListener('input', (e) => {
             this.complexity = parseInt((e.target as HTMLInputElement).value, 10);
             const el = q<HTMLElement>('#complexity-val');
@@ -339,6 +406,21 @@ export class Sidebar {
                 const k = input.dataset.inv as InventoryKey;
                 this.inventory[k] = Math.max(0, parseInt(input.value || '0', 10));
                 this.persist();
+                // Custom edits don't re-render, but the cross toggle's enabled
+                // state depends on the cross count — sync it in place.
+                if (k === 'cross') {
+                    const toggle = q<HTMLInputElement>('#cross-toggle');
+                    const hint = q<HTMLElement>('#cross-none-hint');
+                    const box = q<HTMLElement>('#cross-style-box');
+                    const has = this.inventory.cross > 0;
+                    if (toggle) {
+                        toggle.disabled = !has;
+                        toggle.closest('label')?.classList.toggle('opacity-50', !has);
+                        toggle.closest('label')?.classList.toggle('cursor-pointer', has);
+                    }
+                    hint?.classList.toggle('hidden', has);
+                    box?.classList.toggle('hidden', !(has && this.useCross));
+                }
             });
         });
     }

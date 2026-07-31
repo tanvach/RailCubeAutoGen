@@ -43,14 +43,31 @@ export interface TrackState {
   pruning against the remaining piece budget plus an exact orientation lower bound (the
   word metric over the 24 orientations, BFS-precomputed at module load), a head-home
   candidate ordering when the budget gets tight, cross route-2 handled as a special "pass
-  through occupied cell" step with a once-per-cross rule. `generateTrack()` retries derived
-  seeds on an **escalating budget schedule** (40×15k → 20×60k → 8×250k → 6×1M nodes): backtracking runtimes are
-  heavy-tailed, so many cheap seeds beat a few expensive ones. Passing an explicit
+  through occupied cell" step with a once-per-cross rule. `crossMode` governs the purple
+  crosses: `'off'` never places them, `'straight'` places them as 2-unit straights (an
+  opportunistic route-2 pass is still taken if the loop happens to line one up), and
+  `'crossing'` refuses to close until every placed cross has been re-crossed via route 2
+  (≥ 1 cross). Crossing search treats the owed pass as a waypoint: the distance prune
+  charges the state → route-2 → home detour (plus slack for the piece-free pass moves),
+  homing targets the two free approach cells beside the marked "2" cell (never the solid
+  cell itself), and a mild gravity weight bends the wander back toward them.
+  `generateTrack()` retries derived seeds on an **escalating budget schedule**
+  (40×15k → 20×60k → 8×250k → 6×1M nodes): backtracking runtimes are heavy-tailed, so many
+  cheap seeds beat a few expensive ones. Crossing mode uses a restart-heavier schedule
+  (80×25k → …) because figure-8 seeds either close fast or not at all. Passing an explicit
   `maxNodes` (tests) keeps the old fixed-budget behavior.
+- **`score.ts`** — pure aesthetic score for a finished track, modeled on what the manual's
+  showcase layouts have: compact interlocked bounding box, overpass columns (same x,z at
+  2+ heights), distinct levels, wall/ceiling riding, piece-mix entropy, figure-8 passes,
+  minus a penalty for straight runs past 3. Only compared between candidates generated
+  with the same settings.
 - **`generator.worker.ts`** — message wrapper so search never blocks the UI. If extreme
   settings fail the full schedule, it retries once with softened constraints
-  (`minPieces × 0.6`, `elevation × 0.8`) and flags the response `relaxed` so the UI can
-  say so, rather than surfacing a failure.
+  (`minPieces × 0.6`, `elevation × 0.8`), then — for crossing mode — falls back to
+  `'straight'` crosses, flagging the response `relaxed` with a `note` so the UI can say
+  what happened rather than surfacing a failure. `style: 'showcase'` ("Interesting mode"
+  in the UI) instead generates fresh candidates until ~15 s or 8 successes, scores each
+  with `score.ts`, and returns the winner.
 - **`replay.ts`** — interprets a fixed program (the manual's printed sequences) into placed
   geometry; used by tests, the app's default view, and the console dev hook.
 - **`examples.ts`** — ground-truth programs transcribed from the printed manual
@@ -100,7 +117,10 @@ export interface TrackState {
 
 - **`sidebar.ts`** — kit selector (Starter / Deluxe / Custom), a Simple/Advanced mode
   toggle (Simple: one 1–5 complexity dial mapped to size = 10..whole-kit and elevation =
-  0..0.9; Advanced: separate track-size and elevation sliders), save-to-favorites button,
+  0..0.9; Advanced: separate track-size and elevation sliders), a cross-pieces checkbox
+  with a Straight ×2 / Crossing style toggle (disabled with a hint when the kit has no
+  crosses; `getState()` reports `'off'` whenever the inventory can't honor it), an
+  Interesting-mode checkbox (`style: 'showcase'`), save-to-favorites button,
   live used/total inventory after each generation. All selections persist to localStorage
   (`railcube.settings.v1`) and are restored on load, with validation of stored values.
 - **`instructions.ts`** — assembly-program chips in traversal order (START, L/R on curves,
@@ -147,9 +167,12 @@ export interface TrackState {
 
 ## Known limitations
 
-- The generator excludes cross pieces by design (route-2 loops can't be planned by forward
-  search, so generated crosses were pointless straight-substitutes). The model, replay,
-  renderer, instructions, and favorites all fully support cross pieces.
+- Crossing mode is a closure *requirement*, not a plan: forward search still can't plan a
+  route-2 loop, so the waypoint pruning/homing only steer toward one. At extreme settings
+  (long + very vertical) figure-8s sometimes don't close within the schedule; the worker's
+  fallback chain (soften, then straight crosses) covers this.
+- Showcase scoring is selection-only — it never changes the search itself, just picks the
+  best of several finished candidates.
 - Support pillars are decorative; their count isn't part of the search objective. The
   placement heuristic is intentionally minimal — connectors hold short spans on the toy.
 - "Rail Cube Action" add-on parts (slopes, spinners) are not modeled.

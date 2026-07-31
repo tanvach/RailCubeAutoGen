@@ -68,9 +68,11 @@ The system works on a **3D Integer Grid `(x, y, z)`**. One unit = one cube cell.
       realignment budget; inventory checks.
     * Occupancy check via the solid/swing grid.
     * **Cross handling:** entering an occupied cell is only legal as a cross route-2 pass
-      (perpendicular, same rail normal, once per cross). The generator intentionally never
-      *places* crosses — without a planned route 2 they're just confusing wide straights.
-      Cross pieces remain fully supported in replayed programs and favorites.
+      (perpendicular, same rail normal, once per cross). Cross placement is opt-in via
+      `crossMode`: `'off'` (default) never places them, `'straight'` lays them as 2-unit
+      straights, `'crossing'` requires every placed cross to be re-crossed via route 2
+      (figure-8), steered by waypoint-aware pruning and homing. Cross pieces remain fully
+      supported in replayed programs and favorites.
 4.  **Completion:** state equals the start state with ≥ min pieces placed.
 5.  **Retries:** deterministic seeds (mulberry32); retry derived seeds until a loop closes,
     reporting progress to the UI.

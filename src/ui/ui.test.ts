@@ -108,6 +108,79 @@ describe('Sidebar', () => {
         expect(high.maxPieces).toBeGreaterThan(low.maxPieces);
     });
 
+    it('defaults to classic style with cross pieces off', () => {
+        const spy = vi.fn();
+        new Sidebar('sidebar-root', spy);
+        (document.querySelector('#generate-btn') as HTMLButtonElement).click();
+        const state = spy.mock.calls[0][0];
+        expect(state.crossMode).toBe('off');
+        expect(state.style).toBe('classic');
+    });
+
+    it('disables the cross toggle for kits without cross pieces', () => {
+        const spy = vi.fn();
+        new Sidebar('sidebar-root', spy); // starter: 0 crosses
+        const toggle = document.querySelector('#cross-toggle') as HTMLInputElement;
+        expect(toggle.disabled).toBe(true);
+        expect(document.querySelector('#cross-none-hint')?.classList.contains('hidden')).toBe(false);
+    });
+
+    it('exposes crossMode straight/crossing on the deluxe kit', () => {
+        const spy = vi.fn();
+        new Sidebar('sidebar-root', spy);
+        const select = document.querySelector('#kit-select') as HTMLSelectElement;
+        select.value = 'deluxe';
+        select.dispatchEvent(new Event('change'));
+
+        const toggle = document.querySelector('#cross-toggle') as HTMLInputElement;
+        expect(toggle.disabled).toBe(false);
+        toggle.checked = true;
+        toggle.dispatchEvent(new Event('change'));
+
+        // Default cross style is 'crossing' (figure-8).
+        (document.querySelector('#generate-btn') as HTMLButtonElement).click();
+        expect(spy.mock.calls[0][0].crossMode).toBe('crossing');
+
+        (document.querySelector('[data-cross-style="straight"]') as HTMLButtonElement).click();
+        (document.querySelector('#generate-btn') as HTMLButtonElement).click();
+        expect(spy.mock.calls[1][0].crossMode).toBe('straight');
+    });
+
+    it('never reports a cross mode the inventory cannot honor', () => {
+        const spy = vi.fn();
+        new Sidebar('sidebar-root', spy);
+        const select = document.querySelector('#kit-select') as HTMLSelectElement;
+        select.value = 'deluxe';
+        select.dispatchEvent(new Event('change'));
+        const toggle = document.querySelector('#cross-toggle') as HTMLInputElement;
+        toggle.checked = true;
+        toggle.dispatchEvent(new Event('change'));
+
+        // Back to starter: useCross persists but the kit has no crosses.
+        select.value = 'starter';
+        select.dispatchEvent(new Event('change'));
+        (document.querySelector('#generate-btn') as HTMLButtonElement).click();
+        expect(spy.mock.calls[0][0].crossMode).toBe('off');
+    });
+
+    it('interesting mode maps to showcase style and persists', () => {
+        const spy = vi.fn();
+        new Sidebar('sidebar-root', spy);
+        const toggle = document.querySelector('#interesting-toggle') as HTMLInputElement;
+        toggle.checked = true;
+        toggle.dispatchEvent(new Event('change'));
+        (document.querySelector('#generate-btn') as HTMLButtonElement).click();
+        expect(spy.mock.calls[0][0].style).toBe('showcase');
+
+        // Fresh instance = page reload.
+        document.body.innerHTML = '<div id="sidebar-root"></div>';
+        const spy2 = vi.fn();
+        new Sidebar('sidebar-root', spy2);
+        expect((document.querySelector('#interesting-toggle') as HTMLInputElement).checked).toBe(true);
+        (document.querySelector('#generate-btn') as HTMLButtonElement).click();
+        expect(spy2.mock.calls[0][0].style).toBe('showcase');
+    });
+
     it('renders a link to the GitHub repository', () => {
         new Sidebar('sidebar-root', () => {});
         const link = document.querySelector('a[href="https://github.com/tanvach/RailCubeAutoGen"]');

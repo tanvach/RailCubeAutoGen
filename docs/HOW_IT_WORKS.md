@@ -48,9 +48,9 @@ Every course begins and ends at the white start cube, so the app has three jobs:
 
 The first job sounds like path-finding. It is closer to searching for a self-avoiding loop
 in a state space where the moves don't commute. Most of what follows is about the handful
-of heuristics that make that search feel instant anyway. Everything runs in the browser:
-the solver is dependency-free TypeScript in `src/core/` with no DOM and no Three.js, and
-the renderer lives in `src/view/`.
+of heuristics that usually keep that search under a second (hard deluxe settings can still
+take a few). Everything runs in the browser: the solver is dependency-free TypeScript in
+`src/core/` with no DOM and no Three.js, and the renderer lives in `src/view/`.
 
 ## 2. What a track state has to remember
 
@@ -76,11 +76,12 @@ rail-face normal toward the train. Sketch axes: +x right, +y up, +z into depth a
 camera (down-right). The wall panel uses the −z face so the rail is the visible front.*
 
 `dir` has 6 possible values (±x, ±y, ±z) and `up` has to be perpendicular to it, which
-leaves 4 choices, so each cell has 24 orientations. That matches the rotation group of the
-cube (the chiral octahedral group, isomorphic to S₄). A `(dir, up)` pair pins down a full
-rotation because the third axis is forced: `right = dir × up`. The reachable states are
-
-> ℤ³ × (rotation group of the cube), a discrete version of the rigid-motion group SE(3).
+leaves 4 choices, so each cell has 24 orientations. That is exactly the rotation group of
+the cube (the chiral octahedral group, isomorphic to S₄). A `(dir, up)` pair is enough for
+a full rotation because the third axis is forced: `right = dir × up`. In symbols, the
+reachable states are ℤ³ × that 24-element group — a discrete stand-in for the rigid-motion
+group SE(3). For the solver, the useful bit is simpler: two visits to the same cell with
+the same heading can still need different pieces, so the search state has to carry `up`.
 
 One practical note that saved me a lot of debugging. All the vector math is exact integer
 arithmetic: cross products and negations of axis vectors, with no floats, no normalization
@@ -119,24 +120,22 @@ route 1; the “2” badge marks where route 2 would cross later.*
 
 Two consequences of that table shape the solver.
 
-A track is a sequence of piece letters, and each letter multiplies the current state by a
-fixed group element. The loop closes if and only if the product is the identity: same cell,
-same orientation. In group-theory terms, tracks are walks on a Cayley graph whose generators
-are the pieces, and valid loops are words equal to 1. Ride the train around any legal loop
-and its up vector comes back to where it started — the discrete version of trivial holonomy
-around a closed curve.
+First, a track is just a word in these piece letters. Each letter applies a fixed motion to
+the current state, and the loop closes only when the product is the identity: back at the
+start cell, facing the same way, rail-normal restored. In group-theory language that is a
+walk on a Cayley graph that returns to 1. Ride any legal loop and `up` comes back to where
+it started — you never have leftover twist to cancel by hand.
 
-The second consequence is that rotations don't commute, so there is no simple counting
-invariant. With displacement alone you could say "the x components must sum to zero" and
-prune hard. Once orientation is in the mix, an inner curve followed by a yaw differs from
-the yaw followed by the inner curve, because S₄ is non-abelian. The only invariants left are
-the trivial ones, net displacement zero and net rotation identity, and the pruning in
-section 6 exploits exactly those. Nothing deeper exists in closed form.
+Second, the motions do not commute, so you do not get a cheap counting invariant. With
+displacement alone you could demand that the x components sum to zero and prune hard. With
+orientation in the mix, an inner curve then a yaw is a different state from a yaw then an
+inner curve. The only invariants left are the obvious ones — net displacement zero and net
+rotation identity — and section 6's pruning uses exactly those. Nothing deeper exists in
+closed form.
 
-The `up` vector does real work in the piece definitions. Look at the red outer curve. It
-occupies one cell, and its exit is `cell - up`, because the train wraps convexly around a
-cube edge and continues down the far face of the same cube. Try expressing that with a
-position and a heading. You can't.
+The `up` vector earns its keep in the piece definitions. The red outer curve occupies one
+cell, and its exit is `cell - up`: the train wraps around a cube edge and continues on the
+far face of the same cube. A state of (position, heading) alone cannot say that.
 
 ## 4. What makes a track valid
 
@@ -149,10 +148,10 @@ above a flat curve, the corner region outside an outer curve. An inner curve dec
 because the space it sweeps is the concave notch inside its own body. A solid may never sit
 in anyone's swing cell, and no swing cell may open inside a solid.
 
-Two swing cells may overlap each other, though, and that permission does more work than it
-looks like. It lets two rails face each other across a single empty cell, each claiming that
-cell as clearance. The manual's slotted frame below is impossible to model without it —
-something I only got after staring at the printed manual.
+Two swing cells may overlap each other. That one permission lets two rails face each other
+across a single empty cell, each claiming it as clearance. The manual's slotted frame below
+is impossible to model without it — something I only got after staring at the printed
+manual.
 
 ![Solid vs swing cells](images/solid-vs-swing.svg)
 
@@ -208,7 +207,7 @@ solve(state, pieceCount):
     if state == START_STATE:        return pieceCount >= minPieces      # loop closed
     if cell ahead is occupied:      only a cross route-2 pass can continue
     if provably can't return home:  return false                        # pruning, §6
-    for each piece type, in weighted-random order:                      # ordering, §6
+    for each piece type still in inventory, in weighted-random order:   # ordering, §6
         place it; recurse; on failure, un-place it                      # backtrack
     return false
 ```
@@ -218,12 +217,12 @@ RNG is `mulberry32`, a tiny seedable generator, so the search is fully determini
 given seed and settings. That makes failures reproducible and property tests meaningful
 (section 9).
 
-One deliberate exclusion: the generator never places cross pieces. A cross only earns its
-place if the loop later re-crosses it through route 2, and a forward search has no way to
-plan a rendezvous with its own future. Placed greedily, crosses behaved like over-wide
-straights and cluttered the assembly program. The model still handles a cross that is
-already on the board, which is how the transcribed manual courses of section 9 replay
-correctly. Section 10 sketches how a future search could place them on purpose.
+One exclusion is intentional: the generator never *places* cross pieces. A cross only earns
+its keep if the loop later hits its far cell again on route 2, and a forward search cannot
+plan that rendezvous with its own future. Placed greedily, crosses acted like over-wide
+straights and cluttered the assembly program. The model still knows how to *traverse* a
+cross that is already on the board — that is how the transcribed manual courses in section 9
+replay. Section 10 sketches how a future search could place them on purpose.
 
 ### The recursion in one diagram
 
@@ -248,9 +247,9 @@ flowchart TD
 ## 6. Five heuristics
 
 Plain backtracking is hopeless here. The branching factor is about 5 and useful tracks are
-20 to 60 pieces deep, so the raw tree is astronomically large. The five measures below bring
-the common case down to tens of milliseconds, and the last one covers the cases that still
-refuse to close. Each is small on its own. They compound.
+20 to 60 pieces deep, so the raw tree is enormous. The five measures below bring the common
+case down to tens of milliseconds, and the last one covers the cases that still refuse to
+close. Each is small on its own. They compound.
 
 ### 6.1 Admissible pruning (branch and bound)
 
@@ -287,49 +286,43 @@ Every orientation falls into one of five rows:
 *Three rows from that table, checked against `orientationLowerBound`. Cost 4 is unique:
 heading home while hanging from the ceiling.*
 
-That last row is the odd one. `dir` exactly right with `up` exactly inverted is the single
-hardest orientation in the game, because the move it wants is a roll about the direction of
-travel, and no piece rolls. The solver has to synthesize one from four yaws and pitches. Any
-branch whose orientation debt exceeds the remaining piece budget gets cut.
+That last row is the odd one. `dir` exactly right with `up` exactly inverted is the hardest
+orientation in the game: the move it wants is a roll about the travel direction, and no
+piece rolls. The solver has to synthesize one from four yaws and pitches. Any branch whose
+orientation debt exceeds the remaining piece budget gets cut. The lookup is a 24-entry table
+keyed by `(dir, up)`, filled by BFS when the module loads (`orientationLowerBound` in
+`src/core/generator.ts`).
 
-Now the confession. The first version of this bound was hand-derived — "wrong `dir` costs 1,
-wrong `up` costs 2" — and it was wrong in both directions at once. A single outer curve can
-fix both axes in one move, so the true cost there is 1 where the bound charged 2, making it
-inadmissible and quietly throwing away rare legal closings. Meanwhile the ceiling-hanging
-case really costs 4, where the same bound charged 2 and pruned less than it could have. The
-error survived every test run and went unnoticed until writing this document forced me to
-actually prove admissibility. It is now an exact table with a property test that sweeps all
-24 orientations (`src/core/generator.test.ts`). Writing the explanation is what found the
-bug.
+Confession: the first version of this bound was hand-waved — "wrong `dir` costs 1, wrong
+`up` costs 2" — and it was wrong both ways. A single outer curve can fix both axes at once,
+so the true cost there is 1 where the bound charged 2: inadmissible, and it quietly threw
+away rare legal closings. The ceiling hang really costs 4, where the same bound charged 2
+and pruned less than it should. That error survived every test until writing this document
+forced me to prove admissibility. It is now the exact table above, with a property test over
+all 24 orientations (`src/core/generator.test.ts`).
 
 The distance bound has a second benefit: it confines the search to a sphere of radius
 `maxPieces * 3` around the origin, so the space is finite even though ℤ³ isn't.
 
 ### 6.2 Weighted-random candidate ordering
 
-The elevation slider in the UI doesn't filter pieces; it reshapes a probability
-distribution. Write the slider position as `e`, from 0 for a flat track to 1 for
-climb-whenever-possible. Each candidate then gets a weight: `1.2 - 0.7e` for the flat
-curves, `0.06 + 2.8e²` for the vertical inner and outer curves, and `1.15 - 0.55e` for
-straights. The quadratic on the verticals is deliberate — a linear ramp made mid-slider
-settings burn the starter kit's eight vertical pieces already. On top of that, once the
-train is off the floor the search prefers moves that *stay* off it (and mildly discourages
-dropping back), so a long Wild track doesn't spend its extra pieces as a floor pad after
-a short climb. Candidates are sorted by `rand() / weight`, smallest first, so heavier
-pieces tend to come early. Because the search is depth-first, tried first means committed
-to first, and the track's style falls out of that ordering.
+The elevation slider does not ban pieces. It reshapes which ones the search tries first.
+Call the slider position `e`, from 0 (prefer flat) to 1 (prefer climbs). Each candidate gets
+a weight: `1.2 - 0.7e` for flat curves, `0.06 + 2.8e²` for the vertical inner and outer
+curves, and `1.15 - 0.55e` for straights. The vertical weight is quadratic in `e` so mid
+settings stay mostly flat and high settings climb hard. Once the train leaves the floor,
+the search also prefers moves that stay off it and mildly discourages dropping back — a long
+Wild track should not burn its verticals on a short climb and then pad the rest on the
+floor. Candidates sort by `rand() / weight`, smallest first. Heavier pieces tend to come
+early; because the search is depth-first, early means committed, and the track's style
+falls out of that order.
 
-Sorting by `u/w` is a cheap cousin of the Gumbel-max trick. The exact way to sample an
-ordering proportional to weights is to sort by `-ln(u)/w`, an exponential race, or
-equivalently by `u^(1/w)`, which is Efraimidis and Spirakis weighted reservoir sampling. The
-linear version is biased: with weights of 2 against 1 it puts the heavy item first about
-three quarters of the time instead of two thirds. Since these weights only steer style and
-never correctness, the cheapest formula wins.
-
-Note the floor of `0.06` on the vertical pieces. Even at elevation 0 a wall climb stays
-possible, just rare. A nonzero weight everywhere produces better surprises than a hard
-filter does. The Simple dial's Wild notch tops out around `e = 0.65`, not 1.0 — past that
-the search over-committed vertical pieces and the tracks got flatter, not wilder.
+The exact way to sample an order proportional to weights is to sort by `-ln(u)/w` (or
+equivalently `u^(1/w)` — Efraimidis–Spirakis). Sorting by `u/w` is a biased cousin of that
+trick, cheap enough that it wins here: these weights only steer style, never correctness.
+Vertical pieces keep a floor weight of `0.06`, so even at `e = 0` a wall climb stays rare
+but possible. The Simple dial's Wild notch tops out near `e = 0.65`; past that the search
+tended to over-commit vertical pieces and the tracks got flatter, not wilder.
 
 ### 6.3 The homing phase
 
@@ -338,9 +331,7 @@ dry in mid-air. So the solver watches its slack, `remaining * 3 - dist_home` —
 cells of travel it could still afford to waste and get back anyway. Once that slack falls
 below 15 cells, it drops weighted-random ordering and sorts candidates by how close their
 exit lands to the start cube, with a little noise to break ties. Exploration gives the track
-its character; then a greedy best-first phase brings it home. Two-phase schemes like this
-show up all over combinatorial optimization: a single ordering policy rarely serves both
-halves of a constructive search.
+its character; then a greedy phase brings it home.
 
 ### 6.4 Restarts and the heavy tail
 
@@ -361,24 +352,23 @@ restart schedule with escalating node budgets.
 | 4 | 6 | 1,000,000 |
 
 Forty cheap attempts before any expensive one. That is the practical shape of the Luby,
-Sinclair and Zuckerman result: when runtime distributions are unknown and heavy-tailed, a
-universal restart schedule comes within a log factor of the best possible strategy, and any
-restart policy beats no restart by unbounded factors. Measured on my machine with
-`npx vite-node scripts/bench-generator.ts`, 10 seeds per setting. Each row names a box of
-pieces and one of the sidebar's complexity notches, which together fix the piece budget and
-the elevation slider:
+Sinclair and Zuckerman result: when runtimes are unknown and heavy-tailed, a universal
+restart schedule comes within a log factor of the best fixed strategy. Measured on my
+machine with `npx vite-node scripts/bench-generator.ts`, 10 seeds per setting, wall time
+through the full restart schedule until success or exhaustion. Each row is a kit plus a
+Simple-mode complexity notch (piece budget and elevation together):
 
 ```
 starter balanced (21 pieces, ~25% elevation)  median 30ms    p90 61ms    max 201ms
 starter wild     (32 pieces, 65% elevation)   median 163ms   p90 485ms   max 597ms
-deluxe twisty    (48 pieces, ~45% elevation)  median 230ms   p90 429ms   max 5.2s
-deluxe wild      (66 pieces, 65% elevation)   median 2.0s    p90 5.3s    (harder seeds may relax)
+deluxe twisty    (52 pieces, ~44% elevation)  median 230ms   p90 429ms   max 5.2s
+deluxe wild      (66 pieces, 65% elevation)   median 2.0s    p90 5.3s    some seeds need §6.5
 ```
 
 Before the schedule, and before the integer grid keys of section 4, those medians sat in the
 tens of seconds. The max-to-median ratios are still 5 to 20× even with restarts, so the
-tail shrank but never went away. The bottom row, where the hardest setting leaves 4 seeds
-in 10 with no loop at all, is what the next section handles.
+tail shrank but never went away. When a hard setting still fails after the schedule, the
+next section softens the request once rather than showing an empty scene.
 
 ### 6.5 Graceful relaxation
 
@@ -392,32 +382,30 @@ misrepresent what the user got.
 
 ## 7. Interlude: how many tracks are there?
 
-A closed track that never intersects itself is a self-avoiding polygon on a lattice —
-decorated, since our steps are pieces carrying orientation rather than plain unit edges.
-Self-avoiding walks look innocent and hide a lot of open problems.
+A closed track that never intersects itself is a self-avoiding polygon on a lattice, with
+extra decoration: our steps are oriented pieces, not plain unit edges. Self-avoiding walks
+look innocent and hide open problems.
 
-- Nobody knows a closed-form count of self-avoiding walks of length *n*, even on the 2D
-  square lattice. The count grows like μⁿ, and the connective constant μ isn't known exactly
-  for ℤ² or ℤ³.
-- One exact result stands out: Duminil-Copin and Smirnov proved in 2012 that the honeycomb
-  lattice's connective constant is exactly √(2+√2), work that fed into a Fields Medal. That
-  is about as far as exact counting has gotten for things like this.
-- Sampling these polygons uniformly is its own research area, full of pivot algorithms and
-  Markov chains with delicate mixing-time analysis, because naive growth processes like ours
-  oversample tame shapes.
+- Nobody has a closed-form count of self-avoiding walks of length *n*, even on the 2D square
+  lattice. The count grows like μⁿ, and the connective constant μ is not known exactly for
+  ℤ² or ℤ³.
+- One exact landmark: Duminil-Copin and Smirnov (2012) proved the honeycomb lattice's
+  connective constant is exactly √(2+√2). That is about as far as exact counting has gotten
+  for objects like this.
+- Sampling these polygons uniformly is its own research area (pivot moves, Markov chains,
+  mixing-time arguments). Naive growth processes like ours oversample tame shapes.
 
-None of that machinery is needed here. There was no clever closed-form enumeration waiting
-to be found; a search-based generator is the honest approach; and the tracks this app
-produces are a biased sample of the space (see section 10). It also explains why the search
-feels hard. It is hard, in a way mathematicians have measured.
+None of that machinery is in this app. There was no closed-form enumeration waiting under
+the toy; a search-based generator is the approach that fits; and the tracks it produces are
+a biased sample of the space (section 10). It also explains why the search feels hard — it
+is hard, in a way people have measured.
 
 ## 8. Rendering: from integer cells to a lit scene
 
-The renderer's job is to make the solver's integer world buildable by eye. One rule
-governs the architecture: the solver's output is the single source of geometric truth. The
-renderer never re-derives where a piece sits or which way it faces; it consumes
-`PiecePlacement` verbatim. When rendering and physics share no duplicated math, they can't
-disagree.
+The renderer makes the solver's integer world buildable by eye. One rule: the solver's
+output is the only source of geometric truth. The renderer never re-derives where a piece
+sits or which way it faces; it consumes `PiecePlacement` as-is. Shared math cannot drift if
+there is only one copy of it.
 
 ### 8.1 One mesh, twenty-four orientations
 
@@ -439,38 +427,34 @@ The columns of a rotation matrix are the images of the basis vectors, so the `(d
 pair from the solver drops straight into `makeBasis` and all 24 orientations come free.
 There are no per-orientation meshes and no Euler angle bookkeeping to drift out of sync.
 
-Two small tricks do a lot of the visual work. Chained same-color pieces used to fuse into
-one continuous plastic blob, so each mesh is now scaled to 98% about its own footprint
-center — a hairline seam at every joint, so a builder can count individual cubes. And every
-flat marking (support holes, connector sockets) goes through a single `faceDisc` helper that
-stands the decal a fixed 0.012 units proud of its face. Two exactly coplanar surfaces have
-identical depth-buffer values, and which one wins the depth test varies per pixel and per
-frame. That shimmer is z-fighting. The durable fix is a rule — "decals are never coplanar,
-ever" — rather than nudging offsets one bug report at a time.
+Two small tricks do most of the visual work. Each mesh is scaled to 98% about its own
+footprint center, so chained same-color pieces keep a hairline seam at every joint and a
+builder can count individual cubes. Flat markings (support holes, connector sockets) go
+through a single `faceDisc` helper that stands the decal a fixed 0.012 units proud of its
+face. Two exactly coplanar surfaces share a depth-buffer value, and which one wins flickers
+per pixel and per frame — classic z-fighting. The durable fix is a rule ("decals are never
+coplanar") rather than chasing offsets one bug report at a time.
 
 ### 8.2 Animating the train: arc length and moving frames
 
-The train should glide at constant speed and bank smoothly through wall climbs. Both are
-small differential-geometry problems.
+The train should glide at constant speed and bank smoothly through wall climbs.
 
 Constant speed comes from re-parameterizing the path. Each piece contributes rail samples in
 its local frame — two points for a straight, 14 arc segments for a curve — transformed to
 world space by the same `placementMatrix`. Interpolating by sample index would sprint
 through long segments and crawl through short ones, so the samples are re-parameterized by
-cumulative arc length: to place the train at distance *s*, find the segment containing *s*
-and interpolate inside it. Discrete version of the reparameterization every differential
-geometry course opens with.
+cumulative arc length: to place the train at distance *s*, find the segment that contains
+*s* and interpolate inside it.
 
-Orientation comes from the rail samples, which carry `up` normals taken from the solver's
-model. Each animation frame derives the train's forward vector by differencing positions and
-its up vector by interpolating sample normals, then squares the pair up with cross products:
-`right = fwd × up`, then `trueUp = right × fwd`. That is Gram-Schmidt in three dimensions.
-Interpolating the up vector smoothly along the path is a poor man's parallel transport
-frame, the standard fix for the twist singularities a Frenet frame produces on straight
-segments where curvature (and therefore the Frenet normal) vanishes.
+Orientation comes from the same samples, which carry `up` normals from the solver. Each
+frame gets forward by differencing positions and up by interpolating sample normals, then
+squares the pair with cross products: `right = fwd × up`, then `trueUp = right × fwd`
+(Gram-Schmidt in 3D). Interpolating `up` along the path is a cheap parallel-transport frame
+— enough to avoid the twist singularities a Frenet frame hits on straight segments, where
+curvature and the Frenet normal both vanish.
 
-Pushing `up` all the way from the solver into the animation pays off here: wall riding and
-ceiling hanging need no special cases anywhere. The train has no idea it's upside down.
+Pushing `up` from the solver into the animation is what makes wall rides and ceiling hangs
+need no special cases. The train has no idea it is upside down.
 
 ### 8.3 Supports, camera, and light
 
@@ -490,19 +474,19 @@ planes, and the camera takes the largest demand. On portrait phone screens the v
 direction itself gets steeper, because a flat track seen edge-on through a tall narrow
 window wastes almost every pixel.
 
-The fill light exists because sun-plus-ambient looked great until you orbited to the far
-side of a track, where every surface facing the camera sat in the sun's shade. The fix is a
+The fill light exists because sun-plus-ambient looked fine until you orbited to the far side
+of a track, where every camera-facing surface sat in the sun's shade. The fix is a
 directional fill rigged to the camera, re-aimed every frame from over the viewer's left
-shoulder, kept far enough off-axis to preserve shading instead of flattening everything like
-a headlamp. The neat part is why it needs no dimming logic on the sunny side. Sunlit faces
-already render near the top of the displayable range, so the extra light mostly disappears
-into sRGB's soft clip, while shaded faces sit in the steep part of the gamma curve and gain
-the most. The transfer function does the compositing for you.
+shoulder, far enough off-axis to keep shading instead of flattening like a headlamp. It
+needs no dimming on the sunny side: sunlit faces already sit near the top of the displayable
+range, so the extra light mostly disappears into sRGB's soft clip, while shaded faces sit on
+the steep part of the gamma curve and gain the most. The transfer function does the
+compositing.
 
 ## 9. How we know it's right
 
-This project is tested harder than a hobby project probably deserves, because the failure
-mode is quiet and embarrassing: a kid-facing app that emits a track nobody can build.
+This project is tested harder than a hobby app usually is, because the failure mode is quiet
+and embarrassing: a kid-facing tool that emits a track nobody can build.
 
 Two courses from the printed Japanese manual — the slotted frame and the S-course — are
 transcribed piece by piece in `src/core/examples.ts` and replayed through the real placement
@@ -535,10 +519,9 @@ enable a feature I want anyway, mutating an existing track slightly instead of r
 from scratch.
 
 Cross pieces are never generated (section 5). Placing one on purpose means planning a
-rendezvous with your own future, which fits bidirectional search: grow two arcs from the
-start and stitch them where they meet, using the cross as the splice. Declaring the crossing
-cell a waypoint constraint would work too. Clearest open problem in the project, and
-probably the most fun one.
+rendezvous with your own future. Bidirectional search fits: grow two arcs from the start and
+stitch them where they meet, using the cross as the splice. Declaring the crossing cell a
+waypoint would work too. Clearest open problem in the project, and probably the most fun.
 
 The two lower bounds don't talk to each other. Position debt and orientation debt (section
 6.1) are each exact on their own, but the solver combines them with a `max`, and the joint
@@ -561,8 +544,8 @@ satisfaction would buy precision at the cost of failures and latency, which is t
 trade for a toy.
 
 Supports are theater. Pillar placement is a visual heuristic (section 8.3), not statics. A
-real model would check magnetic joint torque against cantilever moments, which would be
-worth having — the physical toy does sag on long unsupported spans.
+real model would check magnetic joint torque against cantilever moments. Worth doing
+someday: the physical toy does sag on long unsupported spans.
 
 There is rendering headroom left. Every piece is an independent mesh group, so a 66-piece
 deluxe track costs a few hundred draw calls. Fine today. `InstancedMesh`, one draw call per

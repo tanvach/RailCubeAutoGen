@@ -309,11 +309,15 @@ The distance bound has a second benefit: it confines the search to a sphere of r
 
 The elevation slider in the UI doesn't filter pieces; it reshapes a probability
 distribution. Write the slider position as `e`, from 0 for a flat track to 1 for
-climb-whenever-possible. Each candidate then gets a weight: `1.1 - 0.4e` for the flat
-curves, `0.08 + 2.2e` for the vertical inner and outer curves, and a constant 1 for
-straights. Candidates are sorted by `rand() / weight`, smallest first, so heavier pieces
-tend to come early. Because the search is depth-first, tried first means committed to first,
-and the track's style falls out of that ordering.
+climb-whenever-possible. Each candidate then gets a weight: `1.2 - 0.7e` for the flat
+curves, `0.06 + 2.8e²` for the vertical inner and outer curves, and `1.15 - 0.55e` for
+straights. The quadratic on the verticals is deliberate — a linear ramp made mid-slider
+settings burn the starter kit's eight vertical pieces already. On top of that, once the
+train is off the floor the search prefers moves that *stay* off it (and mildly discourages
+dropping back), so a long Wild track doesn't spend its extra pieces as a floor pad after
+a short climb. Candidates are sorted by `rand() / weight`, smallest first, so heavier
+pieces tend to come early. Because the search is depth-first, tried first means committed
+to first, and the track's style falls out of that ordering.
 
 Sorting by `u/w` is a cheap cousin of the Gumbel-max trick. The exact way to sample an
 ordering proportional to weights is to sort by `-ln(u)/w`, an exponential race, or
@@ -322,9 +326,10 @@ linear version is biased: with weights of 2 against 1 it puts the heavy item fir
 three quarters of the time instead of two thirds. Since these weights only steer style and
 never correctness, the cheapest formula wins.
 
-Note the floor of `0.08` on the vertical pieces. Even at elevation 0 a wall climb stays
+Note the floor of `0.06` on the vertical pieces. Even at elevation 0 a wall climb stays
 possible, just rare. A nonzero weight everywhere produces better surprises than a hard
-filter does.
+filter does. The Simple dial's Wild notch tops out around `e = 0.65`, not 1.0 — past that
+the search over-committed vertical pieces and the tracks got flatter, not wilder.
 
 ### 6.3 The homing phase
 
@@ -364,10 +369,10 @@ pieces and one of the sidebar's complexity notches, which together fix the piece
 the elevation slider:
 
 ```
-starter balanced (21 pieces, 45% elevation)   median 30ms    p90 61ms    max 201ms
-starter wild     (32 pieces, 90% elevation)   median 163ms   p90 485ms   max 597ms
-deluxe twisty    (48 pieces, 68% elevation)   median 230ms   p90 429ms   max 5.2s
-deluxe wild      (66 pieces, 90% elevation)   median 2.0s    p90 5.3s    4 of 10 seeds fail
+starter balanced (21 pieces, ~25% elevation)  median 30ms    p90 61ms    max 201ms
+starter wild     (32 pieces, 65% elevation)   median 163ms   p90 485ms   max 597ms
+deluxe twisty    (48 pieces, ~45% elevation)  median 230ms   p90 429ms   max 5.2s
+deluxe wild      (66 pieces, 65% elevation)   median 2.0s    p90 5.3s    (harder seeds may relax)
 ```
 
 Before the schedule, and before the integer grid keys of section 4, those medians sat in the

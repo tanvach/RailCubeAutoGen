@@ -91,6 +91,17 @@ const ORIENT_DIST: ReadonlyMap<number, number> = (() => {
 export const orientationLowerBound = (dir: Vec3, up: Vec3): number =>
     ORIENT_DIST.get(orientKey(dir, up))!;
 
+/** Style weight for a candidate at the given elevation slider position. */
+export const elevationWeight = (type: PieceType, elev: number): number => {
+    const e = Math.min(1, Math.max(0, elev));
+    // Quadratic vertical ramp: mid settings stay mostly flat; high elev climbs.
+    // (A linear 0.08+2.2e made Balanced ≈ Wild on the starter kit's 8 verticals.)
+    if (type === 'curveLeft' || type === 'curveRight') return 1.2 - e * 0.7;
+    if (type === 'inner' || type === 'outer') return 0.06 + e * e * 2.8;
+    if (type === 'straight') return 1.15 - e * 0.55;
+    return 1;
+};
+
 export class Generator {
     private inventory: Inventory;
     private options: GeneratorOptions;
@@ -157,6 +168,7 @@ export class Generator {
         // relative to the distance home, switch to homing: prefer pieces whose
         // exit moves toward the start cube (random order rarely wanders back).
         const elev = this.options.elevation;
+        const onFloor = state.up.y === 1;
         const homing = remaining * MAX_STEP_DIST - dist < 15;
         const scored = CANDIDATES
             .filter((t) => {
@@ -164,13 +176,20 @@ export class Generator {
                 return this.inventory[k] > 0;
             })
             .map((t) => {
-                let w = 1.0;
-                if (t === 'curveLeft' || t === 'curveRight') w = 1.1 - elev * 0.4;
-                else if (t === 'inner' || t === 'outer') w = 0.08 + elev * 2.2;
+                let w = elevationWeight(t, elev);
                 const placement = computePlacement(t, state);
+                // Persistence: once off the floor, prefer staying off it. Raw
+                // vertical-piece weight alone burns inners/outers on short hops
+                // then pads the rest of a long Wild track on the floor.
+                if (elev > 0.2 && !homing) {
+                    const exitOnFloor = placement.exit.up.y === 1;
+                    if (onFloor && !exitOnFloor) w *= 1 + elev;
+                    else if (!onFloor && !exitOnFloor) w *= 1 + elev * 1.8;
+                    else if (!onFloor && exitOnFloor) w *= Math.max(0.2, 1 - elev * 0.65);
+                }
                 const r = homing
                     ? manhattan(placement.exit.cell, START_STATE.cell) + this.rand() * 0.5
-                    : this.rand() / w;
+                    : this.rand() / Math.max(w, 0.05);
                 return { placement, r };
             })
             .sort((a, b) => a.r - b.r);

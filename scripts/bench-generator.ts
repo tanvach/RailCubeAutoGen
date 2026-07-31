@@ -3,11 +3,12 @@
 import { generateTrack } from '../src/core/generator';
 import { STARTER_SET, DELUXE_SET } from '../src/core/pieces';
 
+// Mirrors Simple-mode complexity dial mappings (sidebar getState).
 const CASES = [
-    { name: 'starter balanced (21p, 45%)', inv: STARTER_SET, min: 12, max: 21, elev: 0.45 },
-    { name: 'starter wild    (32p, 90%)', inv: STARTER_SET, min: 19, max: 32, elev: 0.9 },
-    { name: 'deluxe twisty   (48p, 68%)', inv: DELUXE_SET, min: 28, max: 48, elev: 0.68 },
-    { name: 'deluxe wild     (66p, 90%)', inv: DELUXE_SET, min: 39, max: 66, elev: 0.9 },
+    { name: 'starter balanced (21p, 39%)', inv: STARTER_SET, min: 12, max: 21, elev: 0.39 },
+    { name: 'starter wild    (32p, 65%)', inv: STARTER_SET, min: 19, max: 32, elev: 0.65 },
+    { name: 'deluxe twisty   (52p, 44%)', inv: DELUXE_SET, min: 31, max: 52, elev: 0.44 },
+    { name: 'deluxe wild     (66p, 65%)', inv: DELUXE_SET, min: 39, max: 66, elev: 0.65 },
 ] as const;
 
 const SEEDS = [11, 222, 3333, 44444, 555555, 6666666, 777, 88, 9, 1010];

@@ -127,11 +127,13 @@ export class Sidebar {
         let size = this.size;
         let elevation = this.elevation;
         if (this.mode === 'simple') {
-            // One dial: complexity 1..5 scales both track size (small -> whole
-            // kit) and elevation (flat -> very 3D).
+            // One dial: complexity 1..5 scales track size (small → whole kit)
+            // and elevation. Elevation eases in and tops out at 0.65 — cranking
+            // to 0.9 burned vertical pieces on short hops then padded long
+            // floor loops, so Wild looked flat next to Balanced.
             const t = (this.complexity - 1) / 4;
             size = Math.round(10 + (total - 10) * t);
-            elevation = Math.round(t * 90) / 100; // 0 .. 0.9
+            elevation = Math.round(Math.pow(t, 1.35) * 65) / 100; // 0 .. 0.65
         }
         const maxPieces = Math.max(8, Math.min(size, total));
         return {

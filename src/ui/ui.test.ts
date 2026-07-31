@@ -60,7 +60,8 @@ describe('Sidebar', () => {
         (document.querySelector('#generate-btn') as HTMLButtonElement).click();
         const state = spy.mock.calls[0][0];
         expect(state.maxPieces).toBe(21); // midpoint of 10..32 for starter
-        expect(state.elevation).toBeCloseTo(0.45);
+        // Ease-in elev capped at 0.65: t=0.5 → 0.5^1.35 * 0.65.
+        expect(state.elevation).toBeCloseTo(Math.pow(0.5, 1.35) * 0.65, 2);
     });
 
     it('persists selections across instances (browser refresh)', () => {
@@ -103,7 +104,7 @@ describe('Sidebar', () => {
         (document.querySelector('#generate-btn') as HTMLButtonElement).click();
         const high = spy.mock.calls[1][0];
         expect(high.maxPieces).toBe(32); // whole starter kit + start cube
-        expect(high.elevation).toBeCloseTo(0.9);
+        expect(high.elevation).toBeCloseTo(0.65);
         expect(high.maxPieces).toBeGreaterThan(low.maxPieces);
     });
 

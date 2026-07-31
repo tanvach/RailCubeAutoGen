@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { generateTrack, orientationLowerBound, GeneratedTrack } from './generator';
+import {
+    generateTrack, orientationLowerBound, elevationWeight, GeneratedTrack,
+} from './generator';
 import { STARTER_SET, DELUXE_SET, Inventory, statesEqual, START_STATE, computePlacement } from './pieces';
 import { OccupancyGrid } from './grid';
 import { Vec3, v, cross, neg } from './vec';
@@ -156,5 +158,36 @@ describe('generator', () => {
         const b = generateTrack(STARTER_SET, { minPieces: 10, maxPieces: 20, elevation: 0.3, seed: 42 });
         expect(a).not.toBeNull();
         expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    });
+
+    it('keeps mid elevation flatter than high elevation in style weights', () => {
+        // Regression: linear 0.08+2.2e made elev=0.45 prefer verticals over straights.
+        expect(elevationWeight('inner', 0.35)).toBeLessThan(elevationWeight('straight', 0.35));
+        expect(elevationWeight('inner', 0.65)).toBeGreaterThan(elevationWeight('straight', 0.65));
+    });
+
+    it('Wild settings spend more time off the floor than Balanced', () => {
+        // Simple-mode starter mappings (see sidebar getState).
+        const balElev = Math.round(Math.pow(0.5, 1.35) * 65) / 100;
+        const wildElev = Math.round(Math.pow(1, 1.35) * 65) / 100;
+        const offFloorFrac = (min: number, max: number, elev: number, seed: number) => {
+            const track = generateTrack(STARTER_SET, {
+                minPieces: min, maxPieces: max, elevation: elev, seed, maxNodes: 250_000,
+            }, 30);
+            if (!track) return null;
+            const off = track.pieces.filter((p) => p.entry.up.y !== 1).length;
+            return off / track.pieces.length;
+        };
+        let bal = 0, wild = 0, n = 0;
+        for (let s = 0; s < 12; s++) {
+            const a = offFloorFrac(12, 21, balElev, 400 + s * 17);
+            const b = offFloorFrac(19, 32, wildElev, 400 + s * 17);
+            if (a == null || b == null) continue;
+            bal += a;
+            wild += b;
+            n++;
+        }
+        expect(n).toBeGreaterThan(6);
+        expect(wild / n).toBeGreaterThan(bal / n);
     });
 });

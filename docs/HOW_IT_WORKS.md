@@ -37,10 +37,10 @@ This project asks whether a computer can invent new courses from the pieces in t
 Every course begins and ends at the white start cube, so the app has three jobs:
 
 1. Find a sequence of pieces that leaves the white cube and comes back to it exactly —
-   same cell, same direction of travel, same orientation — with no piece overlapping
-   another or blocking the space the train needs.
+   same cell, same direction of travel, same orientation. Pieces must not overlap, and must
+   not block the space the train needs.
 2. Stay inside a real box of pieces. The starter set holds 15 straights, 8 curves, 4 inner
-   curves and 4 outer curves; the deluxe set roughly doubles those and adds 2 crossings.
+   curves and 4 outer curves; the deluxe set roughly doubles those and adds 2 crosses.
    Eight curves is not many for a shape that has to turn all the way back on itself, so the
    box, not the geometry, is usually what runs out first.
 3. Draw the result well enough that a child, or more realistically their parent, can build
@@ -151,7 +151,7 @@ in anyone's swing cell, and no swing cell may open inside a solid.
 Two swing cells may overlap each other. That one permission lets two rails face each other
 across a single empty cell, each claiming it as clearance. The manual's slotted frame below
 is impossible to model without it — something I only got after staring at the printed
-manual.
+manual for too long.
 
 ![Solid vs swing cells](images/solid-vs-swing.svg)
 
@@ -267,11 +267,11 @@ provably dead.
 
 Position is not the only debt to pay off. Orientation is too, and it gets its own exact
 bound. Only curves (a 90° yaw) and inner and outer curves (opposite 90° pitches) change
-orientation, one step per piece, so the fewest pieces that could realign the current
+orientation, one step per piece. So the fewest pieces that could realign the current
 `(dir, up)` with the start frame is its distance to the identity in the Cayley graph of the
 cube's rotation group under those four generators. The group has only 24 elements, so the
-whole metric is a small table, computed by breadth-first search when the module loads.
-Every orientation falls into one of five rows:
+whole metric is a small table, filled by BFS when the module loads. Every orientation falls
+into one of five rows:
 
 | Pieces needed to realign | How many orientations | Example |
 | --- | --- | --- |
@@ -289,9 +289,9 @@ heading home while hanging from the ceiling.*
 That last row is the odd one. `dir` exactly right with `up` exactly inverted is the hardest
 orientation in the game: the move it wants is a roll about the travel direction, and no
 piece rolls. The solver has to synthesize one from four yaws and pitches. Any branch whose
-orientation debt exceeds the remaining piece budget gets cut. The lookup is a 24-entry table
-keyed by `(dir, up)`, filled by BFS when the module loads (`orientationLowerBound` in
-`src/core/generator.ts`).
+orientation debt exceeds the remaining piece budget gets cut. The lookup itself is a
+24-entry table keyed by `(dir, up)`, filled by BFS when the module loads
+(`orientationLowerBound` in `src/core/generator.ts`).
 
 Confession: the first version of this bound was hand-waved — "wrong `dir` costs 1, wrong
 `up` costs 2" — and it was wrong both ways. A single outer curve can fix both axes at once,
@@ -308,14 +308,18 @@ The distance bound has a second benefit: it confines the search to a sphere of r
 
 The elevation slider does not ban pieces. It reshapes which ones the search tries first.
 Call the slider position `e`, from 0 (prefer flat) to 1 (prefer climbs). Each candidate gets
-a weight: `1.2 - 0.7e` for flat curves, `0.06 + 2.8e²` for the vertical inner and outer
-curves, and `1.15 - 0.55e` for straights. The vertical weight is quadratic in `e` so mid
-settings stay mostly flat and high settings climb hard. Once the train leaves the floor,
-the search also prefers moves that stay off it and mildly discourages dropping back — a long
-Wild track should not burn its verticals on a short climb and then pad the rest on the
-floor. Candidates sort by `rand() / weight`, smallest first. Heavier pieces tend to come
-early; because the search is depth-first, early means committed, and the track's style
-falls out of that order.
+a weight:
+
+- flat curves: `1.2 - 0.7e`
+- inner and outer curves: `0.06 + 2.8e²`
+- straights: `1.15 - 0.55e`
+
+The vertical weight is quadratic in `e`, so mid settings stay mostly flat and high settings
+climb hard. Once the train leaves the floor, the search also prefers moves that stay off it
+and mildly discourages dropping back — a long Wild track should not burn its verticals on a
+short climb and then pad the rest on the floor. Candidates sort by `rand() / weight`,
+smallest first. Heavier pieces tend to come early; because the search is depth-first, early
+means committed, and the track's style falls out of that order.
 
 The exact way to sample an order proportional to weights is to sort by `-ln(u)/w` (or
 equivalently `u^(1/w)` — Efraimidis–Spirakis). Sorting by `u/w` is a biased cousin of that
@@ -372,13 +376,12 @@ next section softens the request once rather than showing an empty scene.
 
 ### 6.5 Graceful relaxation
 
-Those failing seeds never reach the user. The solver runs in a Web Worker
-(`src/core/generator.worker.ts`), and if the full schedule finishes without closing a loop,
-the worker softens the request once — cutting the requested minimum length to 60% of what
-you asked for and the elevation to 80% — then runs the whole schedule again and flags the
-result so the UI can say what happened ("Tough settings, relaxed slightly"). Prefer a good
-track now over the requested track never. The flag matters, though: degrading silently would
-misrepresent what the user got.
+Those failing seeds never reach the user as an empty scene. The solver runs in a Web Worker
+(`src/core/generator.worker.ts`). If the full schedule finishes without a closed loop, the
+worker softens the request once: minimum length to 60% of what you asked for, elevation to
+80%, then the whole schedule again. It flags the result so the UI can say what happened
+("Tough settings, relaxed slightly"). Prefer a good track now over the requested track
+never. The flag matters — degrading silently would misrepresent what the user got.
 
 ## 7. Interlude: how many tracks are there?
 
@@ -442,19 +445,22 @@ The train should glide at constant speed and bank smoothly through wall climbs.
 Constant speed comes from re-parameterizing the path. Each piece contributes rail samples in
 its local frame — two points for a straight, 14 arc segments for a curve — transformed to
 world space by the same `placementMatrix`. Interpolating by sample index would sprint
-through long segments and crawl through short ones, so the samples are re-parameterized by
+through long segments and crawl through short ones. So the samples are re-parameterized by
 cumulative arc length: to place the train at distance *s*, find the segment that contains
-*s* and interpolate inside it.
+*s*, then interpolate inside it.
 
 Orientation comes from the same samples, which carry `up` normals from the solver. Each
-frame gets forward by differencing positions and up by interpolating sample normals, then
-squares the pair with cross products: `right = fwd × up`, then `trueUp = right × fwd`
-(Gram-Schmidt in 3D). Interpolating `up` along the path is a cheap parallel-transport frame
-— enough to avoid the twist singularities a Frenet frame hits on straight segments, where
-curvature and the Frenet normal both vanish.
+frame:
 
-Pushing `up` from the solver into the animation is what makes wall rides and ceiling hangs
-need no special cases. The train has no idea it is upside down.
+1. Gets forward by differencing positions.
+2. Gets up by interpolating sample normals.
+3. Squares the pair with cross products: `right = fwd × up`, then `trueUp = right × fwd`
+   (Gram-Schmidt in 3D).
+
+Interpolating `up` along the path is a cheap parallel-transport frame — enough to avoid the
+twist singularities a Frenet frame hits on straight segments, where curvature and the Frenet
+normal both vanish. Pushing `up` from the solver into the animation is what makes wall rides
+and ceiling hangs need no special cases. The train has no idea it is upside down.
 
 ### 8.3 Supports, camera, and light
 
